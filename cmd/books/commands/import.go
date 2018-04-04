@@ -1,12 +1,12 @@
 // Copyright © 2018 Author
 
-package cmd
+package commands
 
 import (
 	"log"
 	"regexp"
 
-	"books/internal"
+	"books"
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -61,11 +61,11 @@ func importFunc(cmd *cobra.Command, args []string) {
 		compiled = append(compiled, c)
 	}
 	for _, f := range args {
-		var book internal.Book
+		var book books.Book
 		var ok bool
 		var parsed bool
 		for _, c := range compiled {
-			book, ok = internal.ParseFilename(f, c)
+			book, ok = books.ParseFilename(f, c)
 			if ok {
 				parsed = true
 				break
@@ -75,7 +75,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 			log.Printf("Unable to parse %s", f)
 			continue
 		}
-		title, tags := internal.SplitTitleAndTags(book.Title)
+		title, tags := books.SplitTitleAndTags(book.Title)
 		book.Title = title
 		book.Tags = tags
 		fmt.Printf("%+v\n", book)

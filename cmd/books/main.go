@@ -2,8 +2,8 @@
 
 package main
 
-import "books/cmd"
+import "books/cmd/books/commands"
 
 func main() {
-	cmd.Execute()
+	commands.Execute()
 }

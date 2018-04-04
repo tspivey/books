@@ -1,6 +1,6 @@
 // Copyright © 2018 Author
 
-package cmd
+package commands
 
 import (
 	"fmt"
