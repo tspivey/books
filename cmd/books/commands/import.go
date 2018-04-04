@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strings"
 	"text/template"
 
 	"books"
@@ -52,25 +53,33 @@ func importFunc(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 	var compiled []*regexp.Regexp
+	var regexpNames []string
 	for _, v := range res {
 		reString := viper.GetString("regexps." + v)
 		if reString == "" {
 			log.Fatalf("Regexp %s not found in config", v)
 		}
+		regexpNames = append(regexpNames, v)
 		c, err := regexp.Compile(reString)
 		if err != nil {
 			log.Fatalf("Cannot compile regular expression %s: %s", v, err)
 		}
 		compiled = append(compiled, c)
 	}
+	library, err := books.OpenLibrary("books.db")
+	if err != nil {
+		log.Fatal("Error opening Library: ", err)
+	}
+	defer library.Close()
 	for _, f := range args {
 		var book books.Book
-		var ok bool
 		var parsed bool
-		for _, c := range compiled {
+		var ok bool
+		for i, c := range compiled {
 			book, ok = books.ParseFilename(f, c)
 			if ok {
 				parsed = true
+				book.RegexpName = regexpNames[i]
 				break
 			}
 		}
@@ -81,16 +90,36 @@ func importFunc(cmd *cobra.Command, args []string) {
 		title, tags := books.SplitTitleAndTags(book.Title)
 		book.Title = title
 		book.Tags = tags
+		book.OriginalFilename = f
+		fi, err := os.Stat(f)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error importing %s: %s\n", f, err)
+			continue
+		}
+		book.FileSize = fi.Size()
+		book.FileMtime = fi.ModTime()
+		err = book.CalculateHash()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error importing %s: %s\n", f, err)
+			continue
+		}
+
 		fmt.Printf("%+v\n", book)
 		var tmpl *template.Template
-		tmpl, err := template.New("filename").Parse(viper.GetString("output_template"))
+		tmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper}).Parse(viper.GetString("output_template"))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error parsing output template: %s\n", err)
+			continue
 		}
 		s, err := book.Filename(tmpl)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
+			continue
 		}
-		fmt.Println(s)
+		book.CurrentFilename = s
+		err = library.ImportBook(book)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error importing book: %s\n", err)
+		}
 	}
 }

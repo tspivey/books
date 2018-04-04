@@ -2,10 +2,15 @@ package books
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"os"
 	"path"
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -13,12 +18,18 @@ import (
 var Version = "unset"
 
 type Book struct {
-	Author string
-	Title  string
-	Series string
-	Format string
-	Tags   []string
-	Hash   string
+	Author           string
+	Title            string
+	Series           string
+	Extension        string
+	Tags             []string
+	Hash             string
+	OriginalFilename string
+	CurrentFilename  string
+	FileMtime        time.Time
+	FileSize         int64
+	RegexpName       string
+	Source           string
 }
 
 func (b Book) Filename(tmpl *template.Template) (string, error) {
@@ -39,7 +50,7 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	result.Author = mapping["author"]
 	result.Title = mapping["title"]
 	result.Series = mapping["series"]
-	result.Format = mapping["ext"]
+	result.Extension = mapping["ext"]
 	return result, true
 }
 
@@ -74,4 +85,20 @@ func re2map(s string, r *regexp.Regexp) map[string]string {
 		rmap[n] = v
 	}
 	return rmap
+}
+
+func (b *Book) CalculateHash() error {
+	fp, err := os.Open(b.OriginalFilename)
+	if err != nil {
+		return errors.Wrap(err, "Cannot calculate hash")
+	}
+	defer fp.Close()
+	hasher := sha256.New()
+	_, err = io.Copy(hasher, fp)
+	if err != nil {
+		return errors.Wrap(err, "Cannot calculate hash")
+	}
+	hash := fmt.Sprintf("%x", hasher.Sum(nil))
+	b.Hash = hash
+	return nil
 }
