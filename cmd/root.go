@@ -1,6 +1,5 @@
 // Copyright © 2018 Author
 
-
 package cmd
 
 import (
