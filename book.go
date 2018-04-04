@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var Version = "unset"
+
 type Book struct {
 	Author string
 	Title  string
