@@ -75,6 +75,9 @@ func importFunc(cmd *cobra.Command, args []string) {
 			log.Printf("Unable to parse %s", f)
 			continue
 		}
+		title, tags := internal.SplitTitleAndTags(book.Title)
+		book.Title = title
+		book.Tags = tags
 		fmt.Printf("%+v\n", book)
 	}
 }

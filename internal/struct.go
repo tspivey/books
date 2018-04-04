@@ -31,7 +31,7 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 
 var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
-func splitTitleAndTags(s string) (string, []string) {
+func SplitTitleAndTags(s string) (string, []string) {
 	var tags = []string{}
 	for {
 		match := tagsRegexp.FindStringSubmatch(s)
