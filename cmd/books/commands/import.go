@@ -4,10 +4,13 @@ package commands
 
 import (
 	"log"
+	"os"
 	"regexp"
+	"text/template"
 
 	"books"
 	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -79,5 +82,15 @@ func importFunc(cmd *cobra.Command, args []string) {
 		book.Title = title
 		book.Tags = tags
 		fmt.Printf("%+v\n", book)
+		var tmpl *template.Template
+		tmpl, err := template.New("filename").Parse(viper.GetString("output_template"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing output template: %s\n", err)
+		}
+		s, err := book.Filename(tmpl)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+		}
+		fmt.Println(s)
 	}
 }

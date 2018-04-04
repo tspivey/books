@@ -1,9 +1,13 @@
 package books
 
 import (
+	"bytes"
 	"path"
 	"regexp"
 	"strings"
+	"text/template"
+
+	"github.com/pkg/errors"
 )
 
 var Version = "unset"
@@ -15,6 +19,14 @@ type Book struct {
 	Format string
 	Tags   []string
 	Hash   string
+}
+
+func (b Book) Filename(tmpl *template.Template) (string, error) {
+	var tpl bytes.Buffer
+	if err := tmpl.Execute(&tpl, b); err != nil {
+		return "", errors.Wrapf(err, "Cannot get filename for book: %+v", b)
+	}
+	return tpl.String(), nil
 }
 
 func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
