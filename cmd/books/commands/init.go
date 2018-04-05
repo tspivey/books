@@ -6,11 +6,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
+var overrideExistingLibrary bool = false
 var initialSchema = `create table books (
 id integer primary key,
 created_on timestamp not null default (datetime()),
@@ -34,16 +36,22 @@ source text
 // initCmd represents the init command
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize the database",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Initialize the library",
+	Long:  `Initialize a new empty library`,
 	Run: func(cmd *cobra.Command, args []string) {
 		dbFile := viper.GetString("db")
-		fmt.Println("Initializing database ", dbFile)
+		if _, err := os.Stat(dbFile); err == nil {
+			if !overrideExistingLibrary {
+				fmt.Fprintf(os.Stderr, "A library already exists in %s. Use -f to forcefully override the existing library, or update db in the config file.\n", dbFile)
+				os.Exit(1)
+			}
+			fmt.Println("Warning: overriding existing library")
+			if err := os.Remove(dbFile); err != nil {
+				fmt.Fprintf(os.Stderr, "Cannot remove existing library: %s\n", err)
+				os.Exit(1)
+			}
+		}
+		fmt.Printf("Initializing library in %s\n", dbFile)
 		db, err := sql.Open("sqlite3", dbFile)
 		if err != nil {
 			log.Fatal(err)
@@ -70,4 +78,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// initCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	initCmd.Flags().BoolVarP(&overrideExistingLibrary, "forceOverride", "f", false, "Override a library if one already exists.")
 }

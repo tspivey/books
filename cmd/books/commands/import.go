@@ -19,13 +19,13 @@ import (
 // importCmd represents the import command
 var importCmd = &cobra.Command{
 	Use:   "import",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Import a book into the library",
+	Long: `Import books into the library from the specified directory.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+    Each file will be matched against the list of regular expressions in order, and will be imported according to the first match.
+    The following named groups will be recognized: author, series, title, and ext.
+    If you choose to let Books manage your files for you, your files will be named according to the output template in the config file,
+    or the template override set in the library.`,
 	Run: CpuProfile(importFunc),
 }
 
@@ -40,15 +40,16 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	importCmd.Flags().StringSliceP("regexp", "r", []string{}, "Regexps to use during import")
-importCmd.Flags().BoolP("move", "m", false, "Move files instead of copying them")
+	importCmd.Flags().StringSliceP("regexp", "r", []string{}, "List of regular expressions to use during import")
+	importCmd.Flags().BoolP("move", "m", false, "Move files instead of copying them")
 	viper.BindPFlag("move", importCmd.Flags().Lookup("move"))
 	viper.BindPFlag("default_regexps", importCmd.Flags().Lookup("regexp"))
 }
 
 func importFunc(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
-		log.Fatal("Filename to import is required.")
+		fmt.Fprintf(os.Stderr, "No files to import.")
+		os.Exit(1)
 	}
 	res := viper.GetStringSlice("default_Regexps")
 	if len(res) == 0 {
@@ -71,7 +72,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 	}
 	library, err := books.OpenLibrary(viper.GetString("db"))
 	if err != nil {
-		log.Fatal("Error opening Library: ", err)
+		log.Fatal("Error opening Library", err)
 	}
 	defer library.Close()
 	for _, f := range args {

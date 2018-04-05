@@ -3,12 +3,12 @@ package books
 import (
 	"database/sql"
 	"io"
+	"log"
 	"os"
 	"path"
 	"strconv"
 	"strings"
-"time"
-"log"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
@@ -95,10 +95,10 @@ func copyFile(src, dst string) (e error) {
 		return err
 	}
 	defer fp.Close()
-st, err := fp.Stat()
-if err != nil {
-return err
-}
+	st, err := fp.Stat()
+	if err != nil {
+		return err
+	}
 	fd, err := os.Create(dst)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ return err
 		if err := fd.Close(); err != nil {
 			e = err
 		}
-_ = os.Chtimes(dst, time.Now(), st.ModTime())
+		_ = os.Chtimes(dst, time.Now(), st.ModTime())
 	}()
 	if _, err := io.Copy(fd, fp); err != nil {
 		return err
@@ -117,15 +117,15 @@ _ = os.Chtimes(dst, time.Now(), st.ModTime())
 
 func moveFile(src, dst string) error {
 	if err := os.Rename(src, dst); err != nil {
-err = copyFile(src, dst)
-if err != nil {
-return err
-}
-err = os.Remove(src)
-if err != nil {
-log.Printf("Error removing %s: %s", src, err)
-return nil
-}
+		err = copyFile(src, dst)
+		if err != nil {
+			return err
+		}
+		err = os.Remove(src)
+		if err != nil {
+			log.Printf("Error removing %s: %s", src, err)
+			return nil
+		}
 	}
 	return nil
 }
