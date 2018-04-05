@@ -41,6 +41,8 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	importCmd.Flags().StringSliceP("regexp", "r", []string{}, "Regexps to use during import")
+importCmd.Flags().BoolP("move", "m", false, "Move files instead of copying them")
+	viper.BindPFlag("move", importCmd.Flags().Lookup("move"))
 	viper.BindPFlag("default_regexps", importCmd.Flags().Lookup("regexp"))
 }
 
@@ -117,8 +119,8 @@ func importFunc(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			continue
 		}
-		book.CurrentFilename = s
-		err = library.ImportBook(book)
+		book.CurrentFilename = books.GetUniqueName(s)
+		err = library.ImportBook(book, viper.GetBool("move"))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error importing book: %s\n", err)
 		}
