@@ -42,7 +42,7 @@ func searchRun(cmd *cobra.Command, args []string) {
 {{if $v.Series}} [{{$v.Series}}]{{end -}}
 {{if $v.Tags}}({{range $i, $v := .Tags -}}
 {{if $i}}, {{end -}}
-{{$v}}){{end}}{{end -}}
+{{$v}}{{end}}){{end -}}
 .{{$v.Extension}}
 {{end}}`
 funcMap := template.FuncMap{
