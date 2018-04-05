@@ -36,8 +36,14 @@ func searchRun(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error while searching for books: %s\n", err)
 		os.Exit(1)
 	}
-	resultTemplate := `{{range $i, $v := . -}}
-{{inc $i}}: {{$v.Author}} - {{$v.Title}}{{if $v.Series}} [{{$v.Series}}]{{end}}{{range .Tags}} ({{.}}){{end}}.{{$v.Extension}}
+    
+	resultTmplSrc := `{{range $i, $v := . -}}
+{{inc $i}}: {{$v.Author}} - {{$v.Title -}}
+{{if $v.Series}} [{{$v.Series}}]{{end -}}
+{{if $v.Tags}}({{range $i, $v := .Tags -}}
+{{if $i}}, {{end -}}
+{{$v}}){{end}}{{end -}}
+.{{$v.Extension}}
 {{end}}`
 funcMap := template.FuncMap{
 "inc": func(i int) int {
@@ -45,7 +51,7 @@ return i+1
 },
 }
 
-	tmpl, err := template.New("result").Funcs(funcMap).Parse(resultTemplate)
+	tmpl, err := template.New("search_result").Funcs(funcMap).Parse(resultTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing template: %s\n", err)
 		os.Exit(1)
