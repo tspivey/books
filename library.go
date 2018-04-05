@@ -15,6 +15,28 @@ import (
 	"github.com/spf13/viper"
 )
 
+var initialSchema = `create table books (
+id integer primary key,
+created_on timestamp not null default (datetime()),
+updated_on timestamp not null default (datetime()),
+author text not null,
+series text,
+title text not null,
+extension text not null,
+tags text,
+original_filename text not null,
+filename text not null,
+file_size integer not null,
+file_mtime timestamp not null,
+hash text not null unique,
+regexp_name text not null,
+template_override text,
+source text
+);
+
+create virtual table books_fts using fts4 (author, series, title, extension, tags,  filename, source);
+`
+
 type Library struct {
 	*sql.DB
 }
@@ -25,6 +47,23 @@ func OpenLibrary(filename string) (*Library, error) {
 		return nil, err
 	}
 	return &Library{db}, nil
+}
+
+func CreateLibrary(filename string) error {
+	log.Printf("Creating library in %s\n", filename)
+	db, err := sql.Open("sqlite3", filename)
+	if err != nil {
+		return errors.Wrap(err, "Create library")
+	}
+	defer db.Close()
+
+	_, err = db.Exec(initialSchema)
+	if err != nil {
+		return errors.Wrap(err, "Create library")
+	}
+
+	log.Printf("Library created in %s\n", filename)
+	return nil
 }
 
 func (db *Library) ImportBook(book Book, move bool) error {

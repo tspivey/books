@@ -3,36 +3,15 @@
 package commands
 
 import (
-	"database/sql"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tspivey/books"
 )
 
 var overrideExistingLibrary bool = false
-var initialSchema = `create table books (
-id integer primary key,
-created_on timestamp not null default (datetime()),
-updated_on timestamp not null default (datetime()),
-author text not null,
-series text,
-title text not null,
-extension text not null,
-tags text,
-original_filename text not null,
-filename text not null,
-file_size integer not null,
-file_mtime timestamp not null,
-hash text not null unique,
-regexp_name text not null,
-template_override text,
-source text
-);
-create virtual table books_fts using fts4 (author, series, title, extension, tags,  filename, source);
-`
 
 // initCmd represents the init command
 var initCmd = &cobra.Command{
@@ -52,18 +31,10 @@ var initCmd = &cobra.Command{
 				os.Exit(1)
 			}
 		}
-		fmt.Printf("Initializing library in %s\n", dbFile)
-		db, err := sql.Open("sqlite3", dbFile)
-		if err != nil {
-			log.Fatal(err)
+		if err := books.CreateLibrary(dbFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot create library: %s\n", err)
+			os.Exit(1)
 		}
-		defer db.Close()
-		_, err = db.Exec(initialSchema)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println("Done.")
 	},
 }
 

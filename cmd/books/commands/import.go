@@ -9,8 +9,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/tspivey/books"
 	"fmt"
+
+	"github.com/tspivey/books"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

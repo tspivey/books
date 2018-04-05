@@ -3,8 +3,9 @@
 package commands
 
 import (
-	"github.com/tspivey/books"
 	"fmt"
+
+	"github.com/tspivey/books"
 
 	"github.com/spf13/cobra"
 )

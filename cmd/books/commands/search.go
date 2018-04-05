@@ -3,11 +3,12 @@
 package commands
 
 import (
-	"github.com/tspivey/books"
 	"fmt"
 	"os"
 	"strings"
 	"text/template"
+
+	"github.com/tspivey/books"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
