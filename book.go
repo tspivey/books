@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/pkg/xattr"
 )
 
 var Version = "unset"
@@ -88,6 +89,10 @@ func re2map(s string, r *regexp.Regexp) map[string]string {
 }
 
 func (b *Book) CalculateHash() error {
+	if data, err := xattr.Get(b.OriginalFilename, "user.hash"); err == nil {
+		b.Hash = string(data)
+		return nil
+	}
 	fp, err := os.Open(b.OriginalFilename)
 	if err != nil {
 		return errors.Wrap(err, "Cannot calculate hash")
