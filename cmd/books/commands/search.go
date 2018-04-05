@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text/template"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -35,9 +36,24 @@ func searchRun(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error while searching for books: %s\n", err)
 		os.Exit(1)
 	}
-	for i, book := range books {
-		tags := strings.Join(book.Tags, "/")
-		fmt.Printf("%d. %s: %s (%s) (%s)\n", i+1, book.Author, book.Title, tags, book.Extension)
+	resultTemplate := `{{range $i, $v := . -}}
+{{inc $i}}: {{$v.Author}} - {{$v.Title}}{{if $v.Series}} [{{$v.Series}}]{{end}}{{range .Tags}} ({{.}}){{end}}.{{$v.Extension}}
+{{end}}`
+funcMap := template.FuncMap{
+"inc": func(i int) int {
+return i+1
+},
+}
+
+	tmpl, err := template.New("result").Funcs(funcMap).Parse(resultTemplate)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing template: %s\n", err)
+		os.Exit(1)
+	}
+	err = tmpl.Execute(os.Stdout, books)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error executing template: %s\n", err)
+		os.Exit(1)
 	}
 }
 
