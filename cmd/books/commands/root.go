@@ -4,7 +4,9 @@ package commands
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"runtime/pprof"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
@@ -12,6 +14,7 @@ import (
 )
 
 var cfgFile string
+var cpuProfile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -44,6 +47,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.books.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "CPU profile filename")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -74,5 +78,23 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config file: %s\n", err)
 		os.Exit(1)
+	}
+}
+
+func CpuProfile(f func(cmd *cobra.Command, args []string)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		var fp *os.File
+		if cpuProfile != "" {
+			fp, err := os.Create(cpuProfile)
+			if err != nil {
+				log.Fatal(err)
+			}
+			pprof.StartCPUProfile(fp)
+		}
+		f(cmd, args)
+		if cpuProfile != "" {
+			pprof.StopCPUProfile()
+			fp.Close()
+		}
 	}
 }
