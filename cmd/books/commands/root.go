@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"runtime/pprof"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -56,17 +57,16 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+	// Find home directory.
+	home, err := homedir.Dir()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	if cfgFile != "" {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Find home directory.
-		home, err := homedir.Dir()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
 		// Search config in home directory with name ".books" (without extension).
 		viper.AddConfigPath(home)
 		viper.SetConfigName(".books")
@@ -79,6 +79,8 @@ func initConfig() {
 		fmt.Fprintf(os.Stderr, "Error loading config file: %s\n", err)
 		os.Exit(1)
 	}
+	viper.SetDefault("root", path.Join(home, "books"))
+	viper.SetDefault("db", path.Join(home, "books.db"))
 }
 
 func CpuProfile(f func(cmd *cobra.Command, args []string)) func(cmd *cobra.Command, args []string) {

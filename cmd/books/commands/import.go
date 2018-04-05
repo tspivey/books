@@ -41,16 +41,17 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	importCmd.Flags().StringSliceP("regexp", "r", []string{}, "Regexps to use during import")
-	cobra.MarkFlagRequired(importCmd.Flags(), "regexp")
+	viper.BindPFlag("default_regexps", importCmd.Flags().Lookup("regexp"))
 }
 
 func importFunc(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
 		log.Fatal("Filename to import is required.")
 	}
-	res, err := cmd.Flags().GetStringSlice("regexp")
-	if err != nil {
-		log.Fatal(err)
+	res := viper.GetStringSlice("default_Regexps")
+	if len(res) == 0 {
+		fmt.Fprintf(os.Stderr, "Either -r must be specified, or default_regexps must be set in the configuration file.\n")
+		os.Exit(1)
 	}
 	var compiled []*regexp.Regexp
 	var regexpNames []string
@@ -66,7 +67,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 		}
 		compiled = append(compiled, c)
 	}
-	library, err := books.OpenLibrary("books.db")
+	library, err := books.OpenLibrary(viper.GetString("db"))
 	if err != nil {
 		log.Fatal("Error opening Library: ", err)
 	}
