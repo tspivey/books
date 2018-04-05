@@ -19,7 +19,7 @@ import (
 var Version = "unset"
 
 type Book struct {
-Id int64
+	Id               int64
 	Author           string
 	Title            string
 	Series           string

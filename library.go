@@ -61,14 +61,14 @@ func (db *library) ImportBook(book Book, move bool) error {
 		tx.Rollback()
 		return err
 	}
-id, err = res.LastInsertId()
-if err != nil {
-tx.Rollback()
-return err
-}
+	id, err = res.LastInsertId()
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
 	res, err = tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  filename, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, book.Author, book.Series, book.Title, book.Extension, tags,  book.CurrentFilename, book.Source)
+		id, book.Author, book.Series, book.Title, book.Extension, tags, book.CurrentFilename, book.Source)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -102,57 +102,57 @@ func (db *library) copyBook(book Book, move bool) error {
 }
 
 func (db *library) Search(term string) ([]Book, error) {
-results := []Book{}
-rows, err := db.Query("select docid from books_fts where books_fts match ?", term)
-if err != nil {
-return results, err
-}
-var ids []int64
-var id int64
-for rows.Next() {
-rows.Scan(&id)
-ids = append(ids, id)
-}
-err = rows.Err()
-if err != nil {
-return results, err
-}
-results, err = db.GetBooksById(ids)
-if err != nil {
-return results, err
-}
-return results, err
+	results := []Book{}
+	rows, err := db.Query("select docid from books_fts where books_fts match ?", term)
+	if err != nil {
+		return results, err
+	}
+	var ids []int64
+	var id int64
+	for rows.Next() {
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	if err != nil {
+		return results, err
+	}
+	results, err = db.GetBooksById(ids)
+	if err != nil {
+		return results, err
+	}
+	return results, err
 }
 
 func (db *library) GetBooksById(ids []int64) ([]Book, error) {
-if len(ids) == 0 {
-return nil, nil
-}
-results := []Book{}
-joined := strings.Repeat("?,", len(ids))
-joined = joined[:len(joined) - 1]
-iids := make([]interface{}, 0)
-for _, id := range ids {
-iids = append(iids, id)
-}
-rows, err := db.Query("select id, author, series, tags, title, extension from books where id in (" + joined + ")", iids...)
-if err != nil {
-return results, errors.Wrap(err, "querying database for books by ID")
-}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	results := []Book{}
+	joined := strings.Repeat("?,", len(ids))
+	joined = joined[:len(joined)-1]
+	iids := make([]interface{}, 0)
+	for _, id := range ids {
+		iids = append(iids, id)
+	}
+	rows, err := db.Query("select id, author, series, tags, title, extension from books where id in ("+joined+")", iids...)
+	if err != nil {
+		return results, errors.Wrap(err, "querying database for books by ID")
+	}
 
-for rows.Next() {
-book := Book{}
-var tags string
-if err := rows.Scan(&book.Id, &book.Author, &book.Series, &tags, &book.Title, &book.Extension); err != nil {
-return results, errors.Wrap(err, "scanning rows")
-}
-book.Tags = strings.Split(tags, "/")
-results = append(results, book)
-}
-if rows.Err() != nil {
-return results, errors.Wrap(err, "querying books by ID")
-}
-return results, nil
+	for rows.Next() {
+		book := Book{}
+		var tags string
+		if err := rows.Scan(&book.Id, &book.Author, &book.Series, &tags, &book.Title, &book.Extension); err != nil {
+			return results, errors.Wrap(err, "scanning rows")
+		}
+		book.Tags = strings.Split(tags, "/")
+		results = append(results, book)
+	}
+	if rows.Err() != nil {
+		return results, errors.Wrap(err, "querying books by ID")
+	}
+	return results, nil
 }
 
 func copyFile(src, dst string) (e error) {

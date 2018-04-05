@@ -36,7 +36,7 @@ func searchRun(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error while searching for books: %s\n", err)
 		os.Exit(1)
 	}
-    
+
 	resultTmplSrc := `{{range $i, $v := . -}}
 {{inc $i}}: {{$v.Author}} - {{$v.Title -}}
 {{if $v.Series}} [{{$v.Series}}]{{end -}}
@@ -45,11 +45,11 @@ func searchRun(cmd *cobra.Command, args []string) {
 {{$v}}{{end}}){{end -}}
 .{{$v.Extension}}
 {{end}}`
-funcMap := template.FuncMap{
-"inc": func(i int) int {
-return i+1
-},
-}
+	funcMap := template.FuncMap{
+		"inc": func(i int) int {
+			return i + 1
+		},
+	}
 
 	tmpl, err := template.New("search_result").Funcs(funcMap).Parse(resultTmplSrc)
 	if err != nil {
