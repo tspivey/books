@@ -15,19 +15,19 @@ import (
 	"github.com/spf13/viper"
 )
 
-type library struct {
+type Library struct {
 	*sql.DB
 }
 
-func OpenLibrary(filename string) (*library, error) {
+func OpenLibrary(filename string) (*Library, error) {
 	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
 		return nil, err
 	}
-	return &library{db}, nil
+	return &Library{db}, nil
 }
 
-func (db *library) ImportBook(book Book, move bool) error {
+func (db *Library) ImportBook(book Book, move bool) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (db *library) ImportBook(book Book, move bool) error {
 	return nil
 }
 
-func (db *library) copyBook(book Book, move bool) error {
+func (db *Library) copyBook(book Book, move bool) error {
 	root := viper.GetString("root")
 	newName := book.CurrentFilename
 	newPath := path.Join(root, newName)
@@ -101,7 +101,7 @@ func (db *library) copyBook(book Book, move bool) error {
 	return nil
 }
 
-func (db *library) Search(term string) ([]Book, error) {
+func (db *Library) Search(term string) ([]Book, error) {
 	results := []Book{}
 	rows, err := db.Query("select docid from books_fts where books_fts match ?", term)
 	if err != nil {
@@ -124,7 +124,7 @@ func (db *library) Search(term string) ([]Book, error) {
 	return results, err
 }
 
-func (db *library) GetBooksById(ids []int64) ([]Book, error) {
+func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
