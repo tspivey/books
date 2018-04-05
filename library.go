@@ -54,9 +54,21 @@ func (db *library) ImportBook(book Book, move bool) error {
 		return err
 	}
 	tags := strings.Join(book.Tags, "/")
-	_, err = tx.Exec(`insert into books (author, series, title, extension, tags, original_filename, filename, file_size, file_mtime, hash, regexp_name, source)
+	res, err := tx.Exec(`insert into books (author, series, title, extension, tags, original_filename, filename, file_size, file_mtime, hash, regexp_name, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		book.Author, book.Series, book.Title, book.Extension, tags, book.OriginalFilename, book.CurrentFilename, book.FileSize, book.FileMtime, book.Hash, book.RegexpName, book.Source)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+id, err = res.LastInsertId()
+if err != nil {
+tx.Rollback()
+return err
+}
+	res, err = tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  filename, source)
+	values (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, book.Author, book.Series, book.Title, book.Extension, tags,  book.CurrentFilename, book.Source)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -87,6 +99,56 @@ func (db *library) copyBook(book Book, move bool) error {
 		return err
 	}
 	return nil
+}
+
+func (db *library) Search(term string) ([]Book, error) {
+results := []Book{}
+rows, err := db.Query("select docid from books_fts where books_fts match ?", term)
+if err != nil {
+return results, err
+}
+var ids []int64
+var id int64
+for rows.Next() {
+rows.Scan(&id)
+ids = append(ids, id)
+}
+err = rows.Err()
+if err != nil {
+return results, err
+}
+results, err = db.GetBooksById(ids)
+if err != nil {
+return results, err
+}
+return results, err
+}
+
+func (db *library) GetBooksById(ids []int64) ([]Book, error) {
+if len(ids) == 0 {
+return nil, nil
+}
+results := []Book{}
+joined := strings.Repeat("?,", len(ids))
+joined = joined[:len(joined) - 1]
+s := []interface{}
+for _, id := range ids {
+s = append(s, id)
+}
+rows, err := db.Query("select id, author, series, tags, title from books where id in (" + joined + ")", s...)
+if err != nil {
+return results, errors.Wrap(err, "querying database for books by ID")
+}
+
+for rows.Next() {
+book := Book{}
+rows.Scan(&book.Id, &book.Author, &book.Series, &book.Tags, &book.Title)
+results = append(results, book)
+}
+if rows.Err() != nil {
+return results, errors.Wrap(err, "querying books by ID")
+}
+return results, nil
 }
 
 func copyFile(src, dst string) (e error) {

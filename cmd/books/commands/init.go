@@ -31,6 +31,7 @@ regexp_name text not null,
 template_override text,
 source text
 );
+create virtual table books_fts using fts4 (author, series, title, extension, tags,  filename, source);
 `
 
 // initCmd represents the init command
