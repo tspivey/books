@@ -2,7 +2,7 @@
 
 package main
 
-import "books/cmd/books/commands"
+import "github.com/tspivey/books/cmd/books/commands"
 
 func main() {
 	commands.Execute()

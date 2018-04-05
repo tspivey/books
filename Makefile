@@ -1,5 +1,5 @@
 VERSION = $(shell git describe --always --long --dirty)
-PACKAGE = books
+PACKAGE = github.com/tspivey/books
 BUILDFLAGS = -ldflags "-X $(PACKAGE).Version=$(VERSION)"
 ifdef WINDIR
 	CURRENT = books.exe
