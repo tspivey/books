@@ -131,11 +131,11 @@ return nil, nil
 results := []Book{}
 joined := strings.Repeat("?,", len(ids))
 joined = joined[:len(joined) - 1]
-s := []interface{}
+iids := make([]interface{}, len(ids))
 for _, id := range ids {
-s = append(s, id)
+iids = append(iids, id)
 }
-rows, err := db.Query("select id, author, series, tags, title from books where id in (" + joined + ")", s...)
+rows, err := db.Query("select id, author, series, tags, title from books where id in (" + joined + ")", iids...)
 if err != nil {
 return results, errors.Wrap(err, "querying database for books by ID")
 }
