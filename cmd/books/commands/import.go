@@ -166,6 +166,7 @@ func importBook(path string, library *books.Library) error {
 		return errors.Wrap(err, "Calculate output filename for book")
 	}
 	book.CurrentFilename = books.GetUniqueName(s)
+	fmt.Printf("Using regexp name: %s\n", book.RegexpName)
 
 	if err := library.ImportBook(book, viper.GetBool("move")); err != nil {
 		return errors.Wrap(err, "Import book into library")
