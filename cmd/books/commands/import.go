@@ -3,19 +3,25 @@
 package commands
 
 import (
-	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
 
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/tspivey/books"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+var compiled []*regexp.Regexp
+var regexpNames []string
+var outputTmpl *template.Template
+var recursive bool
 
 // importCmd represents the import command
 var importCmd = &cobra.Command{
@@ -23,10 +29,14 @@ var importCmd = &cobra.Command{
 	Short: "Import a book into the library",
 	Long: `Import books into the library from the specified directory.
 
-    Each file will be matched against the list of regular expressions in order, and will be imported according to the first match.
-    The following named groups will be recognized: author, series, title, and ext.
-    If you choose to let Books manage your files for you, your files will be named according to the output template in the config file,
-    or the template override set in the library.`,
+You can pass one or more files or directories as arguments to import.
+If a directory is passed, the books in that directory will be imported,
+but the books in its subdirectories will not be, unless --recursive is set.
+
+Each file will be matched against the list of regular expressions in order, and will be imported according to the first match.
+The following named groups will be recognized: author, series, title, and ext.
+Your files will be named according to the output template in the config file,
+or the template override set in the library.`,
 	Run: CpuProfile(importFunc),
 }
 
@@ -43,6 +53,7 @@ func init() {
 	// is called directly, e.g.:
 	importCmd.Flags().StringSliceP("regexp", "r", []string{}, "List of regular expressions to use during import")
 	importCmd.Flags().BoolP("move", "m", false, "Move files instead of copying them")
+	importCmd.Flags().BoolVarP(&recursive, "recursive", "R", false, "Recurse into subdirectories")
 	viper.BindPFlag("move", importCmd.Flags().Lookup("move"))
 	viper.BindPFlag("default_regexps", importCmd.Flags().Lookup("regexp"))
 }
@@ -52,79 +63,111 @@ func importFunc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "No files to import.")
 		os.Exit(1)
 	}
+
 	res := viper.GetStringSlice("default_Regexps")
 	if len(res) == 0 {
 		fmt.Fprintf(os.Stderr, "Either -r must be specified, or default_regexps must be set in the configuration file.\n")
 		os.Exit(1)
 	}
-	var compiled []*regexp.Regexp
-	var regexpNames []string
+
 	for _, v := range res {
 		reString := viper.GetString("regexps." + v)
 		if reString == "" {
-			log.Fatalf("Regexp %s not found in config", v)
+			fmt.Fprintf(os.Stderr, "Regexp %s not found in config\n", v)
+			os.Exit(1)
 		}
 		regexpNames = append(regexpNames, v)
 		c, err := regexp.Compile(reString)
 		if err != nil {
-			log.Fatalf("Cannot compile regular expression %s: %s", v, err)
+			fmt.Fprintf(os.Stderr, "Cannot compile regular expression %s: %s\n", v, err)
+			os.Exit(1)
 		}
 		compiled = append(compiled, c)
 	}
+
+	outputTmplSrc := viper.GetString("output_template")
+	var err error
+	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper}).Parse(outputTmplSrc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
+		os.Exit(1)
+	}
+
 	library, err := books.OpenLibrary(libraryFile)
 	if err != nil {
-		log.Fatal("Error opening Library", err)
+		fmt.Fprintf(os.Stderr, "Error opening Library: %s\n", err)
+		os.Exit(1)
 	}
 	defer library.Close()
-	for _, f := range args {
-		var book books.Book
-		var parsed bool
-		var ok bool
-		for i, c := range compiled {
-			book, ok = books.ParseFilename(f, c)
-			if ok {
-				parsed = true
-				book.RegexpName = regexpNames[i]
-				break
-			}
-		}
-		if !parsed {
-			log.Printf("Unable to parse %s", f)
-			continue
-		}
-		title, tags := books.SplitTitleAndTags(book.Title)
-		book.Title = title
-		book.Tags = tags
-		book.OriginalFilename = f
-		fi, err := os.Stat(f)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error importing %s: %s\n", f, err)
-			continue
-		}
-		book.FileSize = fi.Size()
-		book.FileMtime = fi.ModTime()
-		err = book.CalculateHash()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error importing %s: %s\n", f, err)
-			continue
-		}
 
-		fmt.Printf("%+v\n", book)
-		var tmpl *template.Template
-		tmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper}).Parse(viper.GetString("output_template"))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing output template: %s\n", err)
+	for _, path := range args {
+		if err := importBooks(path, recursive, library); err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot import books from %s: %s; skipping\n", path, err)
 			continue
-		}
-		s, err := book.Filename(tmpl)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-			continue
-		}
-		book.CurrentFilename = books.GetUniqueName(s)
-		err = library.ImportBook(book, viper.GetBool("move"))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error importing book: %s\n", err)
 		}
 	}
+}
+
+func importBooks(root string, recursive bool, library *books.Library) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			if err := importBook(path, library); err != nil {
+				fmt.Fprintf(os.Stderr, "Cannot import book from %s: %s; skipping\n", path, err)
+			}
+			return nil
+		}
+
+		if path != root && !recursive {
+			return filepath.SkipDir
+		}
+
+		return nil
+	})
+}
+
+func importBook(path string, library *books.Library) error {
+	var book books.Book
+	var matched bool
+	for i, c := range compiled {
+		if book, matched = books.ParseFilename(path, c); matched {
+			book.RegexpName = regexpNames[i]
+			book.OriginalFilename = path
+			break
+		}
+	}
+	if !matched {
+		return errors.Errorf("No regular expression matched %s", path)
+	}
+
+	title, tags := books.SplitTitleAndTags(book.Title)
+	book.Title = title
+	book.Tags = tags
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		return errors.Wrap(err, "Get file info for book")
+	}
+	book.FileSize = fi.Size()
+	book.FileMtime = fi.ModTime()
+
+	err = book.CalculateHash()
+	if err != nil {
+		return errors.Wrap(err, "Calculate book hash")
+	}
+
+	s, err := book.Filename(outputTmpl)
+	if err != nil {
+		return errors.Wrap(err, "Calculate output filename for book")
+	}
+	book.CurrentFilename = books.GetUniqueName(s)
+
+	if err := library.ImportBook(book, viper.GetBool("move")); err != nil {
+		return errors.Wrap(err, "Import book into library")
+	}
+
+	return nil
 }
