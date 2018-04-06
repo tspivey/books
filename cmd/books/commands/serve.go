@@ -41,8 +41,8 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// serveCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-    serveCmd.Flags().StringP("bind", "b", "127.0.0.1:8000", "Bind the server to host:port. Leave host empty to bind to all interfaces.")
-    viper.BindPFlag("server.bind", serveCmd.Flags().Lookup("bind"))
+	serveCmd.Flags().StringP("bind", "b", "127.0.0.1:8000", "Bind the server to host:port. Leave host empty to bind to all interfaces.")
+	viper.BindPFlag("server.bind", serveCmd.Flags().Lookup("bind"))
 }
 
 type libHandler struct {
@@ -62,14 +62,14 @@ func runServer(cmd *cobra.Command, args []string) {
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
 	http.Handle("/", r)
-    
-    bindAddr := viper.GetString("server.bind")
-    log.Printf("Listening on %s", bindAddr)
+
+	bindAddr := viper.GetString("server.bind")
+	log.Printf("Listening on %s", bindAddr)
 	log.Fatal(http.ListenAndServe(bindAddr, nil))
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	render("index", w, results{Title: "Search"})
+	render("index", w, nil)
 }
 
 func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
@@ -85,21 +85,30 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(books) == 0 {
-		http.NotFound(w, r)
+		render("error_page", w, errorPage{"Book not found", "That book doesn't exist in the library."})
 		return
 	}
 	book := books[0]
 	root := viper.GetString("root")
 	fn := path.Join(root, book.CurrentFilename)
 	base := path.Base(fn)
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
-	http.ServeFile(w, r, fn)
+	if _, err := os.Stat(fn); os.IsNotExist(err) {
+		log.Printf("Book %d is in the library but the file is missing: %s", book.Id, fn)
+		render("error_page", w, errorPage{"Cannot download book", "It looks like that book is in the library, but the file is missing."})
+	} else {
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
+		http.ServeFile(w, r, fn)
+	}
 }
 
 type results struct {
 	Books []books.Book
 	Query string
-	Title string
+}
+
+type errorPage struct {
+	Short string
+	Long  string
 }
 
 func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +121,7 @@ func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Error searching for %s: %s", val[0], err)
 	}
-	res := results{Books: books, Query: val[0], Title: "Results for " + val[0]}
+	res := results{Books: books, Query: val[0]}
 	render("results", w, res)
 }
 

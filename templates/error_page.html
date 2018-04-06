@@ -1,0 +1,8 @@
+{{ define "error_page" }}
+{{$title := .Short -}}
+{{ template "header" $title }}
+{{ template "searchform" }}
+<h2>{{ .Short }}</h2>
+<p>{{ .Long }}</p>
+{{template "footer" -}}
+{{ end }}
