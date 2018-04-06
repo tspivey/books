@@ -1,6 +1,13 @@
 {{ define "searchform" }}
+<h2>Search for a book</h2>
 <form action="/search/">
-<input type="text" id="searchbox" name="query" aria-label="Query">
-<input type="submit" value="submit">
+<input type="text" id="searchbox" name="query" aria-label="Query" {{ if .Query}}value="{{ .Query }}"{{ end }}>
+<input type="submit" value="Search">
 </form>
+<p>Some examples:</p>
+<ul>
+<li>Wizard's First Rule</li>
+<li>author:"Terry Goodkind" Wizard's First Rule</li>
+<li>series:"Wheel of Time"</li>
+</ul>
 {{ end }}

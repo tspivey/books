@@ -1,8 +1,19 @@
 {{define "results"}}
-{{$title := "Results for {{.Query}}"}}
+{{$title := printf "Results for %s" .Query }}
 {{template "header" $title}}
-{{ range $v := .Books }}
-<a href="/download/{{$v.Id}}">{{$v.Author}}: {{$v.Title}}</a><br>
-{{end}}
+{{ template "searchform" . }}
+<h2>Search results for {{ .Query }}</h2>
+{{ if .Books -}}
+<ul>
+{{ range $v := .Books -}}
+<li><a href="/download/{{$v.Id}}">{{ $v.Author }}: {{ $v.Title -}}
+{{ if $v.Series }} [{{ $v.Series }}]{{end -}}
+{{ if $v.Tags }} ({{ range $i, $v := $v.Tags }}{{ if $i}}, {{end}}{{ $v }}{{end}}){{end -}}
+.{{$v.Extension}}</a></li>
+{{end -}}
+</ul>
+{{ else -}}
+<p>Nothing found</p>
+{{ end }}
 {{template "footer"}}
 {{end}}

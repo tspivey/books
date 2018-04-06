@@ -2,7 +2,13 @@
 <!doctype html>
 <html>
 <head>
-<title>{{.}}</title>
+<title>{{if .}}{{.}} - {{end}}Books</title>
+<meta charset="utf-8">
+<script language='javascript' type='text/javascript'>
+window.onload = function() {
+ document.getElementById("searchbox").focus();
+};
+</script>
 </head>
 <body>
 {{ end }}
