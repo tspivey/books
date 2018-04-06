@@ -1,0 +1,8 @@
+{{define "results"}}
+{{$title := "Results for {{.Query}}"}}
+{{template "header" $title}}
+{{ range $v := .Books }}
+<a href="/download/{{$v.Id}}">{{$v.Author}}: {{$v.Title}}</a><br>
+{{end}}
+{{template "footer"}}
+{{end}}
