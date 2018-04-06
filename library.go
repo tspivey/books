@@ -82,53 +82,58 @@ func (db *Library) ImportBook(book Book, move bool) error {
 	if err != nil {
 		return err
 	}
+
 	rows, err := db.Query("select id from books where hash=?", book.Hash)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	var id int64
-	var exists bool
-	for rows.Next() {
-		exists = true
+	if rows.Next() {
+		var id int64
 		rows.Scan(&id)
-	}
-	err = rows.Err()
-	if exists {
 		tx.Rollback()
 		return errors.Errorf("Book already exists with id %d", id)
 	}
+
 	rows.Close()
 	if rows.Err() != nil {
 		tx.Rollback()
-		return err
+		return errors.Wrapf(err, "Searching for duplicate book by hash %s", book.Hash)
 	}
+
 	tags := strings.Join(book.Tags, "/")
 	res, err := tx.Exec(`insert into books (author, series, title, extension, tags, original_filename, filename, file_size, file_mtime, hash, regexp_name, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		book.Author, book.Series, book.Title, book.Extension, tags, book.OriginalFilename, book.CurrentFilename, book.FileSize, book.FileMtime, book.Hash, book.RegexpName, book.Source)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return errors.Wrap(err, "Inserting book into the db")
 	}
-	id, err = res.LastInsertId()
+
+	id, err := res.LastInsertId()
 	if err != nil {
 		tx.Rollback()
-		return err
+		return errors.Wrap(err, "Fetching new book ID")
 	}
+	book.Id = id
+
 	res, err = tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  filename, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, book.Author, book.Series, book.Title, book.Extension, tags, book.CurrentFilename, book.Source)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return errors.Wrap(err, "Indexing book for search")
 	}
+
 	err = db.copyBook(book, move)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return errors.Wrap(err, "Moving or copying book")
 	}
+
 	tx.Commit()
+	log.Printf("Imported book: %s: %s, ID = %d", book.Author, book.Title, book.Id)
+
 	return nil
 }
 
@@ -136,10 +141,11 @@ func (db *Library) copyBook(book Book, move bool) error {
 	root := viper.GetString("root")
 	newName := book.CurrentFilename
 	newPath := path.Join(root, newName)
-	err := os.MkdirAll(path.Dir(path.Join(root, newName)), 0755)
+	err := os.MkdirAll(path.Dir(newPath), 0755)
 	if err != nil {
 		return err
 	}
+
 	if move {
 		err = moveFile(book.OriginalFilename, newPath)
 	} else {
@@ -148,6 +154,7 @@ func (db *Library) copyBook(book Book, move bool) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -208,26 +215,32 @@ func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
 func copyFile(src, dst string) (e error) {
 	fp, err := os.Open(src)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Copy file")
 	}
 	defer fp.Close()
+
 	st, err := fp.Stat()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Copy file")
 	}
+
 	fd, err := os.Create(dst)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Copy file")
 	}
 	defer func() {
 		if err := fd.Close(); err != nil {
-			e = err
+			e = errors.Wrap(err, "Copy file")
 		}
 		_ = os.Chtimes(dst, time.Now(), st.ModTime())
 	}()
+
 	if _, err := io.Copy(fd, fp); err != nil {
-		return err
+		return errors.Wrap(err, "Copy file")
 	}
+
+	log.Printf("Copied %s to %s", src, dst)
+
 	return nil
 }
 
@@ -242,7 +255,12 @@ func moveFile(src, dst string) error {
 			log.Printf("Error removing %s: %s", src, err)
 			return nil
 		}
+
+		log.Printf("Removed %s", src)
+		return nil
 	}
+
+	log.Printf("Moved %s to %s", src, dst)
 	return nil
 }
 

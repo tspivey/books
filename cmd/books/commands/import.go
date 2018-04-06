@@ -101,6 +101,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 	defer library.Close()
 
 	for _, path := range args {
+		fmt.Printf("Importing %s:\n", path)
 		if err := importBooks(path, recursive, library); err != nil {
 			fmt.Fprintf(os.Stderr, "Cannot import books from %s: %s; skipping\n", path, err)
 			continue
@@ -115,6 +116,7 @@ func importBooks(root string, recursive bool, library *books.Library) error {
 		}
 
 		if !info.IsDir() {
+			fmt.Printf("Importing file %s:\n", path)
 			if err := importBook(path, library); err != nil {
 				fmt.Fprintf(os.Stderr, "Cannot import book from %s: %s; skipping\n", path, err)
 			}
