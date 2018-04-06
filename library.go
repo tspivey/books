@@ -2,6 +2,7 @@ package books
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"io"
 	"log"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -37,12 +38,22 @@ source text
 create virtual table books_fts using fts4 (author, series, title, extension, tags,  filename, source);
 `
 
+func init() {
+	sql.Register("sqlite3async",
+		&sqlite3.SQLiteDriver{
+			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+				conn.Exec("pragma synchronous=off", []driver.Value{})
+				return nil
+			},
+		})
+}
+
 type Library struct {
 	*sql.DB
 }
 
 func OpenLibrary(filename string) (*Library, error) {
-	db, err := sql.Open("sqlite3", filename)
+	db, err := sql.Open("sqlite3async", filename)
 	if err != nil {
 		return nil, err
 	}
