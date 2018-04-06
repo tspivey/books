@@ -22,8 +22,8 @@ import (
 // serveCmd represents the serve command
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Serve the library over the web",
-	Long:  `This command serves the library over the web.`,
+	Short: "Serve the library from a web server",
+	Long:  `Bring up a web server and serve the library.`,
 	Run:   runServer,
 }
 
@@ -41,6 +41,8 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// serveCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+    serveCmd.Flags().StringP("bind", "b", "127.0.0.1:8000", "Bind the server to host:port. Leave host empty to bind to all interfaces.")
+    viper.BindPFlag("server.bind", serveCmd.Flags().Lookup("bind"))
 }
 
 type libHandler struct {
@@ -60,7 +62,10 @@ func runServer(cmd *cobra.Command, args []string) {
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
 	http.Handle("/", r)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+    
+    bindAddr := viper.GetString("server.bind")
+    log.Printf("Listening on %s", bindAddr)
+	log.Fatal(http.ListenAndServe(bindAddr, nil))
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
