@@ -71,7 +71,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 		}
 		compiled = append(compiled, c)
 	}
-	library, err := books.OpenLibrary(viper.GetString("db"))
+	library, err := books.OpenLibrary(libraryFile)
 	if err != nil {
 		log.Fatal("Error opening Library", err)
 	}

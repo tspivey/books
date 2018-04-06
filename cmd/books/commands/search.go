@@ -11,7 +11,6 @@ import (
 	"github.com/tspivey/books"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // searchCmd represents the search command
@@ -27,7 +26,7 @@ Supported fields: author, series, title, tags, extension.
 
 func searchRun(cmd *cobra.Command, args []string) {
 	term := strings.Join(args, " ")
-	lib, err := books.OpenLibrary(viper.GetString("db"))
+	lib, err := books.OpenLibrary(libraryFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot open library: %s", err)
 		os.Exit(1)

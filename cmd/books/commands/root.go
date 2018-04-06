@@ -14,7 +14,8 @@ import (
 	"github.com/spf13/viper"
 )
 
-var cfgFile string
+var cfgDir string
+var libraryFile string
 var cpuProfile string
 
 // rootCmd represents the base command when called without any subcommands
@@ -24,7 +25,7 @@ var rootCmd = &cobra.Command{
 	Long: `Books manages all of your books.
 
 To create a new library, type books init.
-Modify your config file in $HOME/.books.toml, setting up your matching regular expressions.
+Modify your config file in $HOME/.config/books/config.toml, setting up your matching regular expressions.
 Then run books import path/to/books.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
@@ -46,7 +47,7 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.books.toml)")
+	rootCmd.PersistentFlags().StringVar(&cfgDir, "config", "", "config directory (default is $HOME/.config/books)")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "CPU profile filename")
 
 	// Cobra also supports local flags, which will only run
@@ -61,14 +62,16 @@ func initConfig() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
+	if cfgDir != "" {
+		// Use config dir from the flag.
+		viper.AddConfigPath(cfgDir)
+		libraryFile = path.Join(cfgDir, "books.db")
 	} else {
-		// Search config in home directory with name ".books" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigName(".books")
+		// Search for config in $HOME/.config/books
+		viper.AddConfigPath(path.Join(home, ".config", "books"))
+		libraryFile = path.Join(home, ".config", "books", "books.db")
 	}
+	viper.SetConfigName("config")
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err != nil {
@@ -76,7 +79,6 @@ func initConfig() {
 		os.Exit(1)
 	}
 	viper.SetDefault("root", path.Join(home, "books"))
-	viper.SetDefault("db", path.Join(home, "books.db"))
 }
 
 func CpuProfile(f func(cmd *cobra.Command, args []string)) func(cmd *cobra.Command, args []string) {

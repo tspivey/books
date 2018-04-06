@@ -52,7 +52,7 @@ type libHandler struct {
 func runServer(cmd *cobra.Command, args []string) {
 	templates = template.Must(template.ParseGlob("templates/*.html"))
 	r := mux.NewRouter()
-	lib, err := books.OpenLibrary(viper.GetString("db"))
+	lib, err := books.OpenLibrary(libraryFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening library: %s\n", err)
 		os.Exit(1)

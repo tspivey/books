@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/tspivey/books"
 )
 
@@ -19,10 +18,10 @@ var initCmd = &cobra.Command{
 	Short: "Initialize the library",
 	Long:  `Initialize a new empty library`,
 	Run: func(cmd *cobra.Command, args []string) {
-		dbFile := viper.GetString("db")
+		dbFile := libraryFile
 		if _, err := os.Stat(dbFile); err == nil {
 			if !overrideExistingLibrary {
-				fmt.Fprintf(os.Stderr, "A library already exists in %s. Use -f to forcefully override the existing library, or update db in the config file.\n", dbFile)
+				fmt.Fprintf(os.Stderr, "A library already exists in %s. Use -f to forcefully override the existing library, or choose another configuration directory.\n", dbFile)
 				os.Exit(1)
 			}
 			fmt.Println("Warning: overriding existing library")
