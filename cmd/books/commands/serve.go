@@ -17,7 +17,12 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"strings"
+	"sync"
 )
+
+var mapMutex sync.Mutex
+var runningConversions map[int64]bool
 
 // serveCmd represents the serve command
 var serveCmd = &cobra.Command{
@@ -49,6 +54,8 @@ type libHandler struct {
 	lib *books.Library
 }
 
+var cacheDir string
+
 func runServer(cmd *cobra.Command, args []string) {
 	templates = template.Must(template.ParseGlob("templates/*.html"))
 	r := mux.NewRouter()
@@ -56,6 +63,10 @@ func runServer(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening library: %s\n", err)
 		os.Exit(1)
+	}
+	cacheDir = path.Join(path.Dir(libraryFile), "cache")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		log.Fatal("Error creating cache directory: ", err)
 	}
 	lh := libHandler{lib: lib}
 	r.HandleFunc("/", indexHandler)
@@ -95,10 +106,39 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(fn); os.IsNotExist(err) {
 		log.Printf("Book %d is in the library but the file is missing: %s", book.Id, fn)
 		render("error_page", w, errorPage{"Cannot download book", "It looks like that book is in the library, but the file is missing."})
-	} else {
-		w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
-		http.ServeFile(w, r, fn)
+		return
 	}
+	var epubFn string
+	if val, ok := r.URL.Query()["format"]; ok && val[0] == "epub" {
+		epubFn = path.Join(cacheDir, book.Hash+".epub")
+		if _, err := os.Stat(epubFn); os.IsNotExist(err) {
+			// Only start one conversion process per book
+			mapMutex.Lock()
+			if _, ok := runningConversions[book.Id]; !ok {
+				go func() {
+					log.Printf("Converting book %d to epub", book.Id)
+					err := h.lib.ConvertToEpub(book)
+					if err != nil {
+						log.Printf("Error converting book %d to epub: %s", book.Id, err)
+					}
+					log.Printf("Converted book %d to epub", book.Id)
+					mapMutex.Lock()
+					delete(runningConversions, book.Id)
+					mapMutex.Unlock()
+				}()
+				mapMutex.Unlock()
+				render("converting", w, nil)
+				return
+			}
+		} else {
+			n := strings.TrimSuffix(base, path.Ext(base)) + ".epub"
+			w.Header().Set("Content-Disposition", "attachment; filename=\""+n+"\"")
+			http.ServeFile(w, r, epubFn)
+			return
+		}
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
+	http.ServeFile(w, r, fn)
 }
 
 type results struct {

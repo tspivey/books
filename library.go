@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"strconv"
 	"strings"
@@ -50,6 +51,7 @@ func init() {
 
 type Library struct {
 	*sql.DB
+	filename string
 }
 
 func OpenLibrary(filename string) (*Library, error) {
@@ -57,7 +59,7 @@ func OpenLibrary(filename string) (*Library, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Library{db}, nil
+	return &Library{db, filename}, nil
 }
 
 func CreateLibrary(filename string) error {
@@ -192,7 +194,7 @@ func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
 	for _, id := range ids {
 		iids = append(iids, id)
 	}
-	rows, err := db.Query("select id, author, series, tags, title, extension, filename from books where id in ("+joined+")", iids...)
+	rows, err := db.Query("select id, hash, author, series, tags, title, extension, filename from books where id in ("+joined+")", iids...)
 	if err != nil {
 		return results, errors.Wrap(err, "querying database for books by ID")
 	}
@@ -200,7 +202,7 @@ func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
 	for rows.Next() {
 		book := Book{}
 		var tags string
-		if err := rows.Scan(&book.Id, &book.Author, &book.Series, &tags, &book.Title, &book.Extension, &book.CurrentFilename); err != nil {
+		if err := rows.Scan(&book.Id, &book.Hash, &book.Author, &book.Series, &tags, &book.Title, &book.Extension, &book.CurrentFilename); err != nil {
 			return results, errors.Wrap(err, "scanning rows")
 		}
 		book.Tags = strings.Split(tags, "/")
@@ -210,6 +212,17 @@ func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
 		return results, errors.Wrap(err, "querying books by ID")
 	}
 	return results, nil
+}
+
+func (lib *Library) ConvertToEpub(book Book) error {
+	filename := path.Join(viper.GetString("root"), book.CurrentFilename)
+	cacheDir := path.Join(path.Dir(lib.filename), "cache")
+	newFile := path.Join(cacheDir, book.Hash+".epub")
+	cmd := exec.Command("ebook-convert", filename, newFile)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func copyFile(src, dst string) (e error) {
