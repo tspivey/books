@@ -61,20 +61,31 @@ var cacheDir string
 
 func runServer(cmd *cobra.Command, args []string) {
 	templates = template.Must(template.ParseGlob("templates/*.html"))
-	r := mux.NewRouter()
+	cacheDir = path.Join(path.Dir(libraryFile), "cache")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating cache directory: %s\n", err)
+		os.Exit(1)
+	}
+
 	lib, err := books.OpenLibrary(libraryFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening library: %s\n", err)
 		os.Exit(1)
 	}
-	cacheDir = path.Join(path.Dir(libraryFile), "cache")
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		log.Fatal("Error creating cache directory: ", err)
+
+	r := mux.NewRouter()
+	lh := libHandler{
+		lib:        lib,
+		bookCh:     make(chan *books.Book),
+		converting: make(map[int64]error),
 	}
-	lh := libHandler{lib: lib, bookCh: make(chan *books.Book), converting: make(map[int64]error)}
-	for i := 0; i < viper.GetInt("server.conversion_workers"); i++ {
+
+	numConversionWorkers := viper.GetInt("server.conversion_workers")
+	for i := 0; i < numConversionWorkers; i++ {
 		go bookConverterWorker(&lh)
 	}
+	log.Printf("Started %d workers for converting books", numConversionWorkers)
+
 	r.HandleFunc("/", indexHandler)
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
@@ -106,6 +117,7 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	book := books[0]
+
 	root := viper.GetString("root")
 	fn := path.Join(root, book.CurrentFilename)
 	base := path.Base(fn)
@@ -114,6 +126,7 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		render("error_page", w, errorPage{"Cannot download book", "It looks like that book is in the library, but the file is missing."})
 		return
 	}
+
 	var epubFn string
 	if val, ok := r.URL.Query()["format"]; ok && val[0] == "epub" {
 		epubFn = path.Join(cacheDir, book.Hash+".epub")
@@ -124,28 +137,30 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 			if !converting {
 				select {
 				case h.bookCh <- &book:
-					render("converting", w, nil)
+					render("converting", w, book)
 				default:
 					render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
 				}
 				return
-			} else if err != nil {
+			}
+			if err != nil {
 				render("error_page", w, errorPage{"Conversion error", "That book couldn't be converted."})
 				log.Printf("Book %d couldn't be converted: %s", book.Id, err)
 				h.convertingMtx.Lock()
 				delete(h.converting, book.Id)
 				h.convertingMtx.Unlock()
 				return
-			} else {
-				render("converting", w, nil)
 			}
-		} else {
-			n := strings.TrimSuffix(base, path.Ext(base)) + ".epub"
-			w.Header().Set("Content-Disposition", "attachment; filename=\""+n+"\"")
-			http.ServeFile(w, r, epubFn)
+			render("converting", w, book)
 			return
 		}
+
+		n := strings.TrimSuffix(base, path.Ext(base)) + ".epub"
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+n+"\"")
+		http.ServeFile(w, r, epubFn)
+		return
 	}
+
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
 	http.ServeFile(w, r, fn)
 }
@@ -169,7 +184,10 @@ func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
 	books, err := h.lib.Search(val[0])
 	if err != nil {
 		log.Printf("Error searching for %s: %s", val[0], err)
+		render("error_page", w, errorPage{"Error while searching", "An error occurred while searching."})
+		return
 	}
+
 	res := results{Books: books, Query: val[0]}
 	render("results", w, res)
 }
@@ -188,7 +206,6 @@ func bookConverterWorker(h *libHandler) {
 	for book := range h.bookCh {
 		// ok is true for _, ok := map[key] even for nil values.
 		// Add a nil error to signal that a conversion is taking place.
-
 		h.convertingMtx.Lock()
 		h.converting[book.Id] = nil
 		h.convertingMtx.Unlock()
