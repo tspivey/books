@@ -21,9 +21,6 @@ import (
 	"sync"
 )
 
-var mapMutex sync.Mutex
-var runningConversions map[int64]bool
-
 // serveCmd represents the serve command
 var serveCmd = &cobra.Command{
 	Use:   "serve",
@@ -47,11 +44,17 @@ func init() {
 	// is called directly, e.g.:
 	// serveCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	serveCmd.Flags().StringP("bind", "b", "127.0.0.1:8000", "Bind the server to host:port. Leave host empty to bind to all interfaces.")
+	serveCmd.Flags().IntP("conversion-workers", "c", 4, "Number of conversion workers to run")
 	viper.BindPFlag("server.bind", serveCmd.Flags().Lookup("bind"))
+	viper.BindPFlag("server.conversion_workers", serveCmd.Flags().Lookup("conversion-workers"))
 }
 
 type libHandler struct {
-	lib *books.Library
+	lib           *books.Library
+	convertingMtx sync.Mutex
+	// Map holding book conversion status.
+	converting map[int64]error
+	bookCh     chan *books.Book
 }
 
 var cacheDir string
@@ -68,7 +71,10 @@ func runServer(cmd *cobra.Command, args []string) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		log.Fatal("Error creating cache directory: ", err)
 	}
-	lh := libHandler{lib: lib}
+	lh := libHandler{lib: lib, bookCh: make(chan *books.Book), converting: make(map[int64]error)}
+	for i := 0; i < viper.GetInt("server.conversion_workers"); i++ {
+		go bookConverterWorker(&lh)
+	}
 	r.HandleFunc("/", indexHandler)
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
@@ -112,23 +118,26 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	if val, ok := r.URL.Query()["format"]; ok && val[0] == "epub" {
 		epubFn = path.Join(cacheDir, book.Hash+".epub")
 		if _, err := os.Stat(epubFn); os.IsNotExist(err) {
-			// Only start one conversion process per book
-			mapMutex.Lock()
-			if _, ok := runningConversions[book.Id]; !ok {
-				go func() {
-					log.Printf("Converting book %d to epub", book.Id)
-					err := h.lib.ConvertToEpub(book)
-					if err != nil {
-						log.Printf("Error converting book %d to epub: %s", book.Id, err)
-					}
-					log.Printf("Converted book %d to epub", book.Id)
-					mapMutex.Lock()
-					delete(runningConversions, book.Id)
-					mapMutex.Unlock()
-				}()
-				mapMutex.Unlock()
-				render("converting", w, nil)
+			h.convertingMtx.Lock()
+			err, converting := h.converting[book.Id]
+			h.convertingMtx.Unlock()
+			if !converting {
+				select {
+				case h.bookCh <- &book:
+					render("converting", w, nil)
+				default:
+					render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
+				}
 				return
+			} else if err != nil {
+				render("error_page", w, errorPage{"Conversion error", "That book couldn't be converted."})
+				log.Printf("Book %d couldn't be converted: %s", book.Id, err)
+				h.convertingMtx.Lock()
+				delete(h.converting, book.Id)
+				h.convertingMtx.Unlock()
+				return
+			} else {
+				render("converting", w, nil)
 			}
 		} else {
 			n := strings.TrimSuffix(base, path.Ext(base)) + ".epub"
@@ -172,5 +181,25 @@ func render(name string, w http.ResponseWriter, data interface{}) {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Error")
 		return
+	}
+}
+
+func bookConverterWorker(h *libHandler) {
+	for book := range h.bookCh {
+		// ok is true for _, ok := map[key] even for nil values.
+		// Add a nil error to signal that a conversion is taking place.
+
+		h.convertingMtx.Lock()
+		h.converting[book.Id] = nil
+		h.convertingMtx.Unlock()
+
+		err := h.lib.ConvertToEpub(*book)
+		h.convertingMtx.Lock()
+		if err != nil {
+			h.converting[book.Id] = err
+		} else {
+			delete(h.converting, book.Id)
+		}
+		h.convertingMtx.Unlock()
 	}
 }
