@@ -1,12 +1,9 @@
 {{ define "converting" }}
-<html>
-<head>
-<title>Converting Book</title>
-<meta http-equiv="refresh" content="15">
-</head>
-<body>
+{{ $title := "Converting Book" }}
+{{ template "header" $title }}
+{{ template "searchform" }}
+<h1>Converting Book</h1>
 <p>Your book, {{ .Author }}: <em>{{ .Title }}</em>, is being converted. Please wait.</p>
 <p>This page will periodically reload to check progress. Once the conversion is complete, the download will start.</p>
-</body>
-</html>
+{{ template "footer" }}
 {{ end }}

@@ -137,6 +137,7 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 			if !converting {
 				select {
 				case h.bookCh <- &book:
+					w.Header().Set("Refresh", "15")
 					render("converting", w, book)
 				default:
 					render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
@@ -151,6 +152,7 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 				h.convertingMtx.Unlock()
 				return
 			}
+			w.Header().Set("Refresh", "15")
 			render("converting", w, book)
 			return
 		}
