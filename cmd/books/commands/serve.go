@@ -60,12 +60,13 @@ type libHandler struct {
 var cacheDir string
 
 func runServer(cmd *cobra.Command, args []string) {
-	templates = template.Must(template.ParseGlob("templates/*.html"))
 	cacheDir = path.Join(path.Dir(libraryFile), "cache")
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating cache directory: %s\n", err)
 		os.Exit(1)
 	}
+	templatesDir := path.Join(path.Dir(libraryFile), "templates")
+	templates = template.Must(template.ParseGlob(path.Join(templatesDir, "*.html")))
 
 	lib, err := books.OpenLibrary(libraryFile)
 	if err != nil {
