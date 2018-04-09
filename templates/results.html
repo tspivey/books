@@ -4,17 +4,27 @@
 {{ template "searchform" . }}
 <h2>Search results for {{ .Query }}</h2>
 {{ if .Books -}}
-<ul>
+<table id="results">
+    <tr>
+        <th>Title</th>
+        <th>Author</th>
+        <th>Series</th>
+        <th>Format</th>
+        <th>Tags</th>
+        <th>Convert</th>
+    </tr>
 {{ range $v := .Books -}}
-<li><a href="/download/{{$v.Id}}">{{ $v.Author }}: {{ $v.Title -}}
-{{ if $v.Series }} [{{ $v.Series }}]{{end -}}
-{{ if $v.Tags }} ({{ range $i, $v := $v.Tags }}{{ if $i}}, {{end}}{{ $v }}{{end}}){{end -}}
-.{{$v.Extension}}</a>
-{{if eq .Extension "mobi" "azw3" "lit" }}
-<a href="/download/{{ .Id }}?format=epub">Convert to epub</a>
-{{end}}</li>
+    <tr>
+        <td><a href="/download/{{ $v.Id }}">{{ $v.Title }}</a></td>
+        <td>{{ $v.Author }}</td>
+        <td>{{ $v.Series }}</td>
+        <td>{{ $v.Extension }}</td>
+        <td>{{ if $v.Tags }}{{ range $i, $v := $v.Tags }}{{ if $i}}, {{end}}{{ $v }}{{end}}{{end }}</td>
+        <td>{{if eq $v.Extension "mobi" "azw3" "lit" -}}
+            <a href="/download/{{ .Id }}?format=epub">Convert to epub</a>{{ end }}</td>
+    </tr>
 {{end -}}
-</ul>
+</table>
 {{ else -}}
 <p>Nothing found</p>
 {{ end }}
