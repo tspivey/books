@@ -17,6 +17,7 @@ import (
 var cfgDir string
 var libraryFile string
 var cpuProfile string
+var htpasswdFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -71,6 +72,7 @@ func initConfig() {
 		viper.AddConfigPath(cfgDir)
 	}
 	libraryFile = path.Join(cfgDir, "books.db")
+	htpasswdFile = path.Join(cfgDir, "htpasswd")
 	viper.SetConfigName("config")
 
 	// If a config file is found, read it in.

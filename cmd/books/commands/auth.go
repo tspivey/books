@@ -3,12 +3,8 @@
 package commands
 
 import (
-	"path"
-
 	"github.com/spf13/cobra"
 )
-
-var htpasswdFile string
 
 // authCmd represents the auth command
 var authCmd = &cobra.Command{
@@ -22,5 +18,4 @@ Delete this file to disable authentication.`,
 
 func init() {
 	rootCmd.AddCommand(authCmd)
-	htpasswdFile = path.Join(cfgDir, "htpasswd")
 }
