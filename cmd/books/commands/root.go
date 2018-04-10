@@ -65,12 +65,12 @@ func initConfig() {
 	if cfgDir != "" {
 		// Use config dir from the flag.
 		viper.AddConfigPath(cfgDir)
-		libraryFile = path.Join(cfgDir, "books.db")
 	} else {
 		// Search for config in $HOME/.config/books
-		viper.AddConfigPath(path.Join(home, ".config", "books"))
-		libraryFile = path.Join(home, ".config", "books", "books.db")
+		cfgDir = path.Join(home, ".config", "books")
+		viper.AddConfigPath(cfgDir)
 	}
+	libraryFile = path.Join(cfgDir, "books.db")
 	viper.SetConfigName("config")
 
 	// If a config file is found, read it in.
