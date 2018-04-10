@@ -4,21 +4,24 @@ package commands
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
 	"path"
 	"strconv"
+	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/tspivey/books"
+
+	"strings"
+	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"strings"
-	"sync"
 )
 
 // serveCmd represents the serve command
@@ -90,11 +93,17 @@ func runServer(cmd *cobra.Command, args []string) {
 	r.HandleFunc("/", indexHandler)
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
-	http.Handle("/", r)
 
-	bindAddr := viper.GetString("server.bind")
-	log.Printf("Listening on %s", bindAddr)
-	log.Fatal(http.ListenAndServe(bindAddr, nil))
+	srv := &http.Server{
+		Addr:         viper.GetString("server.bind"),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		Handler:      r,
+	}
+
+	log.Printf("Listening on %s", srv.Addr)
+	log.Fatal(srv.ListenAndServe())
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
