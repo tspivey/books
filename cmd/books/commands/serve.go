@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	auth "github.com/abbot/go-http-auth"
 	"github.com/pkg/errors"
 
 	"github.com/tspivey/books"
@@ -63,12 +64,12 @@ type libHandler struct {
 var cacheDir string
 
 func runServer(cmd *cobra.Command, args []string) {
-	cacheDir = path.Join(path.Dir(libraryFile), "cache")
+	cacheDir = path.Join(cfgDir, "cache")
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating cache directory: %s\n", err)
 		os.Exit(1)
 	}
-	templatesDir := path.Join(path.Dir(libraryFile), "templates")
+	templatesDir := path.Join(cfgDir, "templates")
 	templates = template.Must(template.ParseGlob(path.Join(templatesDir, "*.html")))
 
 	lib, err := books.OpenLibrary(libraryFile)
@@ -94,12 +95,20 @@ func runServer(cmd *cobra.Command, args []string) {
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
 
+	secProvider := auth.HtpasswdFileProvider(htpasswdFile)
+	authHandler := auth.NewBasicAuthenticator("Basic Realm", secProvider)
+	handler := http.Handler(r)
+	if _, err := os.Stat(htpasswdFile); err == nil {
+		handler = auth.JustCheck(authHandler, handler.ServeHTTP)
+		log.Printf("Using htpasswd file: %s\n", htpasswdFile)
+	}
+
 	srv := &http.Server{
 		Addr:         viper.GetString("server.bind"),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 		IdleTimeout:  120 * time.Second,
-		Handler:      r,
+		Handler:      handler,
 	}
 
 	log.Printf("Listening on %s", srv.Addr)
