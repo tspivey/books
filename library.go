@@ -41,7 +41,7 @@ create virtual table books_fts using fts4 (author, series, title, extension, tag
 func init() {
 	// Add a connect hook to set synchronous = off for all connections.
 	// This improves performance, especially during import,
-	// but since changes aren't immediately synched to disk, data could be lost during a power outage or sudden OS crash.
+	// but since changes aren't immediately synced to disk, data could be lost during a power outage or sudden OS crash.
 	sql.Register("sqlite3async",
 		&sqlite3.SQLiteDriver{
 			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
@@ -206,7 +206,7 @@ func (lib *Library) Search(terms string) ([]Book, error) {
 	return results, nil
 }
 
-// GetBooksById retreives books from the library by their id.
+// GetBooksById retrieves books from the library by their id.
 func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 	if len(ids) == 0 {
 		return nil, nil

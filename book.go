@@ -36,7 +36,7 @@ type Book struct {
 	Source           string
 }
 
-// Filename retreives a book's correct filename, based on the given output template.
+// Filename retrieves a book's correct filename, based on the given output template.
 func (b Book) Filename(tmpl *template.Template) (string, error) {
 	var fnBuff bytes.Buffer
 	if err := tmpl.Execute(&fnBuff, b); err != nil {
