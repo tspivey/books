@@ -40,7 +40,7 @@ type Book struct {
 func (b Book) Filename(tmpl *template.Template) (string, error) {
 	var fnBuff bytes.Buffer
 	if err := tmpl.Execute(&fnBuff, b); err != nil {
-		return "", errors.Wrap(err, "Retreive formatted filename for book")
+		return "", errors.Wrap(err, "Retrieve formatted filename for book")
 	}
 	return fnBuff.String(), nil
 }

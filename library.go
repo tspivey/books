@@ -51,7 +51,7 @@ func init() {
 		})
 }
 
-// Library represents a set of books in persistant storage.
+// Library represents a set of books in persistent storage.
 type Library struct {
 	*sql.DB
 	filename  string
@@ -195,7 +195,7 @@ func (lib *Library) Search(terms string) ([]Book, error) {
 	}
 	err = rows.Err()
 	if err != nil {
-		return results, errors.Wrap(err, "Retreiving search results from db")
+		return results, errors.Wrap(err, "Retrieving search results from db")
 	}
 
 	results, err = lib.GetBooksById(ids)
