@@ -34,19 +34,11 @@ var serveCmd = &cobra.Command{
 }
 
 var templates *template.Template
+var cacheDir string
 
 func init() {
 	rootCmd.AddCommand(serveCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// serveCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// serveCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	serveCmd.Flags().StringP("bind", "b", "127.0.0.1:8000", "Bind the server to host:port. Leave host empty to bind to all interfaces.")
 	serveCmd.Flags().IntP("conversion-workers", "c", 4, "Number of conversion workers to run")
 	viper.BindPFlag("server.bind", serveCmd.Flags().Lookup("bind"))
@@ -56,12 +48,9 @@ func init() {
 type libHandler struct {
 	lib           *books.Library
 	convertingMtx sync.Mutex
-	// Map holding book conversion status.
-	converting map[int64]error
-	bookCh     chan *books.Book
+	converting    map[int64]error // Holds book conversion status
+	bookCh        chan *books.Book
 }
-
-var cacheDir string
 
 func runServer(cmd *cobra.Command, args []string) {
 	cacheDir = path.Join(cfgDir, "cache")
@@ -72,7 +61,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	templatesDir := path.Join(cfgDir, "templates")
 	templates = template.Must(template.ParseGlob(path.Join(templatesDir, "*.html")))
 
-	lib, err := books.OpenLibrary(libraryFile)
+	lib, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening library: %s\n", err)
 		os.Exit(1)
@@ -137,8 +126,7 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	book := books[0]
 
-	root := viper.GetString("root")
-	fn := path.Join(root, book.CurrentFilename)
+	fn := path.Join(booksRoot, book.CurrentFilename)
 	base := path.Base(fn)
 	if _, err := os.Stat(fn); os.IsNotExist(err) {
 		log.Printf("Book %d is in the library but the file is missing: %s", book.Id, fn)
@@ -202,6 +190,7 @@ func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", 301)
 		return
 	}
+
 	books, err := h.lib.Search(val[0])
 	if err != nil {
 		log.Printf("Error searching for %s: %s", val[0], err)
@@ -213,6 +202,7 @@ func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
 	render("results", w, res)
 }
 
+// render renders the template specified by name to w, and sets dot (.) to data.
 func render(name string, w http.ResponseWriter, data interface{}) {
 	err := templates.ExecuteTemplate(w, name, data)
 	if err != nil {
@@ -223,6 +213,7 @@ func render(name string, w http.ResponseWriter, data interface{}) {
 	}
 }
 
+// bookConverterWorker listens on h.booksCh for books to convert to epub.
 func bookConverterWorker(h *libHandler) {
 	for book := range h.bookCh {
 		// ok is true for _, ok := map[key] even for nil values.

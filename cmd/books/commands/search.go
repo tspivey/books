@@ -20,18 +20,23 @@ var searchCmd = &cobra.Command{
 	Long: `Search the library.
 By default, all fields are searched. This can be overridden with field:value.
 Supported fields: author, series, title, tags, extension.
-`,
+
+Examples:
+    Wizard's First Rule
+    series:Sword+of+Truth
+    author:Terry+Goodkind title:Phantom`,
 	Run: CpuProfile(searchRun),
 }
 
 func searchRun(cmd *cobra.Command, args []string) {
-	term := strings.Join(args, " ")
-	lib, err := books.OpenLibrary(libraryFile)
+	terms := strings.Join(args, " ")
+	lib, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot open library: %s", err)
 		os.Exit(1)
 	}
-	books, err := lib.Search(term)
+
+	books, err := lib.Search(terms)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error while searching for books: %s\n", err)
 		os.Exit(1)
@@ -56,6 +61,7 @@ func searchRun(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error parsing template: %s\n", err)
 		os.Exit(1)
 	}
+
 	err = tmpl.Execute(os.Stdout, books)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error executing template: %s\n", err)
@@ -65,14 +71,4 @@ func searchRun(cmd *cobra.Command, args []string) {
 
 func init() {
 	rootCmd.AddCommand(searchCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// searchCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// searchCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

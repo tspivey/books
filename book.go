@@ -17,7 +17,9 @@ import (
 )
 
 var Version = "unset"
+var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
+// Book represents a book in a library.
 type Book struct {
 	Id               int64
 	Author           string
@@ -34,14 +36,40 @@ type Book struct {
 	Source           string
 }
 
+// Filename retreives a book's correct filename, based on the given output template.
 func (b Book) Filename(tmpl *template.Template) (string, error) {
-	var tpl bytes.Buffer
-	if err := tmpl.Execute(&tpl, b); err != nil {
-		return "", errors.Wrapf(err, "Cannot get filename for book: %+v", b)
+	var fnBuff bytes.Buffer
+	if err := tmpl.Execute(&fnBuff, b); err != nil {
+		return "", errors.Wrap(err, "Retreive formatted filename for book")
 	}
-	return tpl.String(), nil
+	return fnBuff.String(), nil
 }
 
+// CalculateHash calculates the hash of b.OriginalFilename and updates book.Hash.
+// If a value is stored in the user.hash xattr, that value will be used instead of hashing the file's contents.
+func (b *Book) CalculateHash() error {
+	if data, err := xattr.Get(b.OriginalFilename, "user.hash"); err == nil {
+		b.Hash = string(data)
+		return nil
+	}
+	fp, err := os.Open(b.OriginalFilename)
+	if err != nil {
+		return errors.Wrap(err, "Calculate hash")
+	}
+	defer fp.Close()
+
+	hasher := sha256.New()
+	_, err = io.Copy(hasher, fp)
+	if err != nil {
+		return errors.Wrap(err, "Calculate hash")
+	}
+	hash := fmt.Sprintf("%x", hasher.Sum(nil))
+	b.Hash = hash
+	return nil
+}
+
+// ParseFilename creates a new Book given a filename and regular expression.
+// The named groups author, title, series, and extension in the regular expression will map to their respective fields in the resulting book.
 func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	result := Book{}
 	filename = path.Base(filename)
@@ -56,9 +84,11 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	return result, true
 }
 
-var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
-
+// SplitTitleAndTags takes an unsplit title in the form "title (tag1) (tag2)..."
+// and returns the title and tags separately.
 func SplitTitleAndTags(s string) (string, []string) {
+	// Match tags from the right first,
+	// adding tags in reverse order until the last non 0 length match is the title.
 	var tags = []string{}
 	for {
 		match := tagsRegexp.FindStringSubmatch(s)
@@ -71,40 +101,25 @@ func SplitTitleAndTags(s string) (string, []string) {
 	return strings.Trim(s, " "), tags
 }
 
+// re2map returns a map of named groups to their matches.
+// Example:
+//     regexp: ^(?P<first>\w+) (?P<second>\w+)$
+//     string: hello world
+//     result: first => hello, second => world
 func re2map(s string, r *regexp.Regexp) map[string]string {
 	rmap := make(map[string]string)
-	b := []byte(s)
-	matches := r.FindSubmatch(b)
+	matches := r.FindStringSubmatch(s)
 	if len(matches) == 0 {
 		return nil
 	}
+
 	names := r.SubexpNames()
 	for i, n := range names {
 		if i == 0 {
 			continue
 		}
-		v := string(matches[i])
-		rmap[n] = v
+		rmap[n] = matches[i]
 	}
-	return rmap
-}
 
-func (b *Book) CalculateHash() error {
-	if data, err := xattr.Get(b.OriginalFilename, "user.hash"); err == nil {
-		b.Hash = string(data)
-		return nil
-	}
-	fp, err := os.Open(b.OriginalFilename)
-	if err != nil {
-		return errors.Wrap(err, "Cannot calculate hash")
-	}
-	defer fp.Close()
-	hasher := sha256.New()
-	_, err = io.Copy(hasher, fp)
-	if err != nil {
-		return errors.Wrap(err, "Cannot calculate hash")
-	}
-	hash := fmt.Sprintf("%x", hasher.Sum(nil))
-	b.Hash = hash
-	return nil
+	return rmap
 }

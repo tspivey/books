@@ -14,7 +14,6 @@ import (
 
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 var initialSchema = `create table books (
@@ -40,6 +39,9 @@ create virtual table books_fts using fts4 (author, series, title, extension, tag
 `
 
 func init() {
+	// Add a connect hook to set synchronous = off for all connections.
+	// This improves performance, especially during import,
+	// but since changes aren't immediately synched to disk, data could be lost during a power outage or sudden OS crash.
 	sql.Register("sqlite3async",
 		&sqlite3.SQLiteDriver{
 			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
@@ -49,19 +51,26 @@ func init() {
 		})
 }
 
+// Library represents a set of books in persistant storage.
 type Library struct {
 	*sql.DB
-	filename string
+	filename  string
+	booksRoot string
 }
 
-func OpenLibrary(filename string) (*Library, error) {
+// OpenLibrary opens a library stored in a file.
+func OpenLibrary(filename, booksRoot string) (*Library, error) {
 	db, err := sql.Open("sqlite3async", filename)
 	if err != nil {
 		return nil, err
 	}
-	return &Library{db, filename}, nil
+	return &Library{db, filename, booksRoot}, nil
 }
 
+// CreateLibrary initializes a new library in the specified file.
+// Once CreateLibrary is called, the file will be ready to open and accept new books.
+// Warning: This function sets up a new library for the first time. To get a Library based on an existing library file,
+// call OpenLibrary.
 func CreateLibrary(filename string) error {
 	log.Printf("Creating library in %s\n", filename)
 	db, err := sql.Open("sqlite3", filename)
@@ -79,22 +88,26 @@ func CreateLibrary(filename string) error {
 	return nil
 }
 
-func (db *Library) ImportBook(book Book, move bool) error {
-	tx, err := db.Begin()
+// ImportBook adds a book to a library.
+// The file referred to by book.OriginalFilename will either be copied or moved to the location referred to by book.CurrentFilename, relative to the configured books root.
+// The book will not be imported if another book already in the library has the same hash.
+func (lib *Library) ImportBook(book Book, move bool) error {
+	tx, err := lib.Begin()
 	if err != nil {
 		return err
 	}
 
-	rows, err := db.Query("select id from books where hash=?", book.Hash)
+	rows, err := lib.Query("select id from books where hash=?", book.Hash)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 	if rows.Next() {
+		// This book's hash is already in the library.
 		var id int64
 		rows.Scan(&id)
 		tx.Rollback()
-		return errors.Errorf("Book already exists with id %d", id)
+		return errors.Errorf("A duplicate book already exists with id %d", id)
 	}
 
 	rows.Close()
@@ -119,6 +132,7 @@ func (db *Library) ImportBook(book Book, move bool) error {
 	}
 	book.Id = id
 
+	// Index book for searching.
 	res, err = tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  filename, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, book.Author, book.Series, book.Title, book.Extension, tags, book.CurrentFilename, book.Source)
@@ -127,7 +141,7 @@ func (db *Library) ImportBook(book Book, move bool) error {
 		return errors.Wrap(err, "Indexing book for search")
 	}
 
-	err = db.copyBook(book, move)
+	err = lib.moveOrCopyFile(book, move)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "Moving or copying book")
@@ -139,10 +153,11 @@ func (db *Library) ImportBook(book Book, move bool) error {
 	return nil
 }
 
-func (db *Library) copyBook(book Book, move bool) error {
-	root := viper.GetString("root")
+// moveOrCopyFile moves or copies a file from book.OriginalFilename to book.CurrentFilename, relative to the configured books root.
+// All necessary directories to make the destination valid will be created.
+func (lib *Library) moveOrCopyFile(book Book, move bool) error {
 	newName := book.CurrentFilename
-	newPath := path.Join(root, newName)
+	newPath := path.Join(lib.booksRoot, newName)
 	err := os.MkdirAll(path.Dir(newPath), 0755)
 	if err != nil {
 		return err
@@ -160,12 +175,18 @@ func (db *Library) copyBook(book Book, move bool) error {
 	return nil
 }
 
-func (db *Library) Search(term string) ([]Book, error) {
+// Search searches the library for books.
+// By default, all fields are searched, but
+// field:terms+to+search will limit to that field only.
+// Fields: author, title, series, extension, tags, filename, source.
+// Example: author:Stephen+King title:Shining
+func (lib *Library) Search(terms string) ([]Book, error) {
 	results := []Book{}
-	rows, err := db.Query("select docid from books_fts where books_fts match ?", term)
+	rows, err := lib.Query("select docid from books_fts where books_fts match ?", terms)
 	if err != nil {
-		return results, err
+		return results, errors.Wrap(err, "Querying db for search terms")
 	}
+
 	var ids []int64
 	var id int64
 	for rows.Next() {
@@ -174,19 +195,23 @@ func (db *Library) Search(term string) ([]Book, error) {
 	}
 	err = rows.Err()
 	if err != nil {
-		return results, err
+		return results, errors.Wrap(err, "Retreiving search results from db")
 	}
-	results, err = db.GetBooksById(ids)
+
+	results, err = lib.GetBooksById(ids)
 	if err != nil {
 		return results, err
 	}
-	return results, err
+
+	return results, nil
 }
 
-func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
+// GetBooksById retreives books from the library by their id.
+func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
+
 	results := []Book{}
 	joined := strings.Repeat("?,", len(ids))
 	joined = joined[:len(joined)-1]
@@ -194,9 +219,10 @@ func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
 	for _, id := range ids {
 		iids = append(iids, id)
 	}
-	rows, err := db.Query("select id, hash, author, series, tags, title, extension, filename from books where id in ("+joined+")", iids...)
+
+	rows, err := lib.Query("select id, hash, author, series, tags, title, extension, filename from books where id in ("+joined+")", iids...)
 	if err != nil {
-		return results, errors.Wrap(err, "querying database for books by ID")
+		return results, errors.Wrap(err, "fetching books from database by ID")
 	}
 
 	for rows.Next() {
@@ -205,26 +231,34 @@ func (db *Library) GetBooksById(ids []int64) ([]Book, error) {
 		if err := rows.Scan(&book.Id, &book.Hash, &book.Author, &book.Series, &tags, &book.Title, &book.Extension, &book.CurrentFilename); err != nil {
 			return results, errors.Wrap(err, "scanning rows")
 		}
+
 		book.Tags = strings.Split(tags, "/")
 		results = append(results, book)
 	}
+
 	if rows.Err() != nil {
 		return results, errors.Wrap(err, "querying books by ID")
 	}
+
 	return results, nil
 }
 
+// ConvertToEpub converts a book to epub, and caches it in LIBRARY_ROOT/cache.
+// This depends on ebook-convert, which takes the original filename, and the new filename, in that order.
+// the book's current hash, with the extension .epub, will be the name of the cached file.
 func (lib *Library) ConvertToEpub(book Book) error {
-	filename := path.Join(viper.GetString("root"), book.CurrentFilename)
+	filename := path.Join(lib.booksRoot, book.CurrentFilename)
 	cacheDir := path.Join(path.Dir(lib.filename), "cache")
 	newFile := path.Join(cacheDir, book.Hash+".epub")
 	cmd := exec.Command("ebook-convert", filename, newFile)
 	if err := cmd.Run(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
+// copyFile copies a file from src to dst, setting dst's modified time to that of src.
 func copyFile(src, dst string) (e error) {
 	fp, err := os.Open(src)
 	if err != nil {
@@ -257,6 +291,9 @@ func copyFile(src, dst string) (e error) {
 	return nil
 }
 
+// moveFile moves a file from src to dst.
+// First, moveFile will attempt to rename the file,
+// and if that fails, it will perform a copy and delete.
 func moveFile(src, dst string) error {
 	if err := os.Rename(src, dst); err != nil {
 		err = copyFile(src, dst)
@@ -269,7 +306,7 @@ func moveFile(src, dst string) error {
 			return nil
 		}
 
-		log.Printf("Removed %s", src)
+		log.Printf("Moved %s to %s (copy/delete)", src, dst)
 		return nil
 	}
 
@@ -277,6 +314,7 @@ func moveFile(src, dst string) error {
 	return nil
 }
 
+// GetUniqueName checks to see if a file named f already exists, and if so, finds a unique name.
 func GetUniqueName(f string) string {
 	i := 1
 	ext := path.Ext(f)

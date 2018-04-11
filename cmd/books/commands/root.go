@@ -16,6 +16,7 @@ import (
 
 var cfgDir string
 var libraryFile string
+var booksRoot string
 var cpuProfile string
 var htpasswdFile string
 
@@ -28,9 +29,6 @@ var rootCmd = &cobra.Command{
 To create a new library, type books init.
 Modify your config file in $HOME/.config/books/config.toml, setting up your matching regular expressions.
 Then run books import path/to/books.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -44,15 +42,8 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
 	rootCmd.PersistentFlags().StringVar(&cfgDir, "config", "", "config directory (default is $HOME/.config/books)")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "CPU profile filename")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -80,9 +71,12 @@ func initConfig() {
 		fmt.Fprintf(os.Stderr, "Error loading config file: %s\n", err)
 		os.Exit(1)
 	}
+
 	viper.SetDefault("root", path.Join(home, "books"))
+	booksRoot = viper.GetString("root")
 }
 
+// CpuProfile wraps a cobra command for CPU profiling.
 func CpuProfile(f func(cmd *cobra.Command, args []string)) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		var fp *os.File

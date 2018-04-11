@@ -43,14 +43,6 @@ or the template override set in the library.`,
 func init() {
 	rootCmd.AddCommand(importCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// importCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
 	importCmd.Flags().StringSliceP("regexp", "r", []string{}, "List of regular expressions to use during import")
 	importCmd.Flags().BoolP("move", "m", false, "Move files instead of copying them")
 	importCmd.Flags().BoolVarP(&recursive, "recursive", "R", false, "Recurse into subdirectories")
@@ -64,6 +56,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Get regular expressions by their names and compile them.
 	res := viper.GetStringSlice("default_Regexps")
 	if len(res) == 0 {
 		fmt.Fprintf(os.Stderr, "Either -r must be specified, or default_regexps must be set in the configuration file.\n")
@@ -93,7 +86,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	library, err := books.OpenLibrary(libraryFile)
+	library, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening Library: %s\n", err)
 		os.Exit(1)
@@ -109,6 +102,8 @@ func importFunc(cmd *cobra.Command, args []string) {
 	}
 }
 
+// importBooks imports one or more books into the library.
+// root may be either a file or directory.
 func importBooks(root string, recursive bool, library *books.Library) error {
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -131,6 +126,7 @@ func importBooks(root string, recursive bool, library *books.Library) error {
 	})
 }
 
+// importBook imports a single book into the library.
 func importBook(path string, library *books.Library) error {
 	var book books.Book
 	var matched bool

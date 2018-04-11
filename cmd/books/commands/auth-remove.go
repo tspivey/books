@@ -14,6 +14,9 @@ import (
 var removeCmd = &cobra.Command{
 	Use:   "remove <username>",
 	Short: "Remove an authenticated user from the web server",
+	Long: `Remove an authenticated user from the web server.
+When the last user is removed, authentication will still be enabled. This means that nobody can access the server until a user is added.
+This is to prevent someone from accidentally making a library public by removing a user.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		removeUser(cmd, args)
 	},
