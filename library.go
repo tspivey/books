@@ -209,15 +209,15 @@ func insertAuthor(tx *sql.Tx, author string, book *Book) error {
 		if err != nil {
 			return err
 		}
-		// Author inserted, insert the link
 		authorId, err = res.LastInsertId()
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec("insert into books_authors (book_id, author_id) values(?, ?)", book.Id, authorId); err != nil {
-			return err
-		}
 	} else if err != nil {
+		return err
+	}
+	// Author inserted, insert the link
+	if _, err := tx.Exec("insert into books_authors (book_id, author_id) values(?, ?)", book.Id, authorId); err != nil {
 		return err
 	}
 	return nil
@@ -234,15 +234,15 @@ func insertTag(tx *sql.Tx, tag string, book *Book) error {
 		if err != nil {
 			return err
 		}
-		// Tag inserted, insert the link
 		tagId, err = res.LastInsertId()
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec("insert into books_tags (book_id, tag_id) values(?, ?)", book.Id, tagId); err != nil {
-			return err
-		}
 	} else if err != nil {
+		return err
+	}
+	// Tag inserted, insert the link
+	if _, err := tx.Exec("insert into books_tags (book_id, tag_id) values(?, ?)", book.Id, tagId); err != nil {
 		return err
 	}
 	return nil
