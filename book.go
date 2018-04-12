@@ -22,7 +22,7 @@ var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 // Book represents a book in a library.
 type Book struct {
 	Id               int64
-	Author           string
+	Authors          []string
 	Title            string
 	Series           string
 	Extension        string
@@ -77,7 +77,7 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	if mapping == nil {
 		return result, false
 	}
-	result.Author = mapping["author"]
+	result.Authors = []string{mapping["author"]}
 	result.Title = mapping["title"]
 	result.Series = mapping["series"]
 	result.Extension = mapping["ext"]

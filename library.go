@@ -20,7 +20,6 @@ var initialSchema = `create table books (
 id integer primary key,
 created_on timestamp not null default (datetime()),
 updated_on timestamp not null default (datetime()),
-author text not null,
 series text,
 title text not null,
 extension text not null,
@@ -33,6 +32,38 @@ hash text not null unique,
 regexp_name text not null,
 template_override text,
 source text
+);
+
+create table authors (
+id integer primary key,
+created_on timestamp not null default (datetime()),
+updated_on timestamp not null default (datetime()),
+name text not null unique
+);
+
+create table books_authors (
+id integer primary key,
+created_on timestamp not null default (datetime()),
+updated_on timestamp not null default (datetime()),
+book_id integer not null references books(id) on delete cascade,
+author_id integer not null references authors(id) on delete cascade,
+unique (book_id, author_id)
+);
+
+create table tags (
+id integer primary key,
+created_on timestamp not null default (datetime()),
+updated_on timestamp not null default (datetime()),
+name text not null unique
+);
+
+create table books_tags (
+id integer primary key,
+created_on timestamp not null default (datetime()),
+updated_on timestamp not null default (datetime()),
+book_id integer not null references books(id) on delete cascade,
+tag_id integer not null references tags(id) on delete cascade,
+unique (book_id, tag_id)
 );
 
 create virtual table books_fts using fts4 (author, series, title, extension, tags,  filename, source);
@@ -117,9 +148,9 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 	}
 
 	tags := strings.Join(book.Tags, "/")
-	res, err := tx.Exec(`insert into books (author, series, title, extension, tags, original_filename, filename, file_size, file_mtime, hash, regexp_name, source)
-	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		book.Author, book.Series, book.Title, book.Extension, tags, book.OriginalFilename, book.CurrentFilename, book.FileSize, book.FileMtime, book.Hash, book.RegexpName, book.Source)
+	res, err := tx.Exec(`insert into books (series, title, extension, original_filename, filename, file_size, file_mtime, hash, regexp_name, source)
+	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		book.Series, book.Title, book.Extension, book.OriginalFilename, book.CurrentFilename, book.FileSize, book.FileMtime, book.Hash, book.RegexpName, book.Source)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "Inserting book into the db")
@@ -132,10 +163,24 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 	}
 	book.Id = id
 
+	for _, author := range book.Authors {
+		if err := insertAuthor(tx, author, &book); err != nil {
+			tx.Rollback()
+			return errors.Wrapf(err, "inserting author %s", author)
+		}
+	}
+
+	for _, tag := range book.Tags {
+		if err := insertTag(tx, tag, &book); err != nil {
+			tx.Rollback()
+			return errors.Wrapf(err, "inserting tag %s", tag)
+		}
+	}
+
 	// Index book for searching.
 	res, err = tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  filename, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, book.Author, book.Series, book.Title, book.Extension, tags, book.CurrentFilename, book.Source)
+		id, strings.Join(book.Authors, "&"), book.Series, book.Title, book.Extension, tags, book.CurrentFilename, book.Source)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "Indexing book for search")
@@ -148,8 +193,58 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 	}
 
 	tx.Commit()
-	log.Printf("Imported book: %s: %s, ID = %d", book.Author, book.Title, book.Id)
+	log.Printf("Imported book: %s: %s, ID = %d", strings.Join(book.Authors, "&"), book.Title, book.Id)
 
+	return nil
+}
+
+// insertAuthor inserts an author into the database.
+func insertAuthor(tx *sql.Tx, author string, book *Book) error {
+	var authorId int64
+	row := tx.QueryRow("select id from authors where name=?", author)
+	err := row.Scan(&authorId)
+	if err == sql.ErrNoRows {
+		// Insert the author
+		res, err := tx.Exec("insert into authors (name) values(?)", author)
+		if err != nil {
+			return err
+		}
+		// Author inserted, insert the link
+		authorId, err = res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("insert into books_authors (book_id, author_id) values(?, ?)", book.Id, authorId); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+// insertTag inserts a tag into the database.
+func insertTag(tx *sql.Tx, tag string, book *Book) error {
+	var tagId int64
+	row := tx.QueryRow("select id from tags where name=?", tag)
+	err := row.Scan(&tagId)
+	if err == sql.ErrNoRows {
+		// Insert the tag
+		res, err := tx.Exec("insert into tags (name) values(?)", tag)
+		if err != nil {
+			return err
+		}
+		// Tag inserted, insert the link
+		tagId, err = res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("insert into books_tags (book_id, tag_id) values(?, ?)", book.Id, tagId); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -220,24 +315,63 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 		iids = append(iids, id)
 	}
 
-	rows, err := lib.Query("select id, hash, author, series, tags, title, extension, filename from books where id in ("+joined+")", iids...)
+	rows, err := lib.Query("select id, hash, series, title, extension, filename from books where id in ("+joined+")", iids...)
 	if err != nil {
 		return results, errors.Wrap(err, "fetching books from database by ID")
 	}
 
 	for rows.Next() {
 		book := Book{}
-		var tags string
-		if err := rows.Scan(&book.Id, &book.Hash, &book.Author, &book.Series, &tags, &book.Title, &book.Extension, &book.CurrentFilename); err != nil {
+		if err := rows.Scan(&book.Id, &book.Hash, &book.Series, &book.Title, &book.Extension, &book.CurrentFilename); err != nil {
 			return results, errors.Wrap(err, "scanning rows")
 		}
 
-		book.Tags = strings.Split(tags, "/")
 		results = append(results, book)
 	}
 
 	if rows.Err() != nil {
 		return results, errors.Wrap(err, "querying books by ID")
+	}
+	rows.Close()
+
+	// Get authors and tags
+	for _, book := range results {
+		rows, err = lib.Query("select name from authors where id=?", book.Id)
+		if err != nil {
+			return results, errors.Wrap(err, "selecting authors")
+		}
+		for rows.Next() {
+			var name string
+			err := rows.Scan(&name)
+			if err != nil {
+				rows.Close()
+				return results, errors.Wrap(err, "selecting authors")
+			}
+			book.Authors = append(book.Authors, name)
+		}
+		if rows.Err() != nil {
+			return results, errors.Wrap(err, "getting authors")
+		}
+		rows.Close()
+
+		rows, err = lib.Query("select name from tags where id=?", book.Id)
+		if err != nil {
+			return results, errors.Wrap(err, "selecting tags")
+		}
+		for rows.Next() {
+			var name string
+			err := rows.Scan(&name)
+			if err != nil {
+				rows.Close()
+				return results, errors.Wrap(err, "selecting tags")
+			}
+			book.Tags = append(book.Tags, name)
+		}
+		if rows.Err() != nil {
+			return results, errors.Wrap(err, "getting authors")
+		}
+		rows.Close()
+
 	}
 
 	return results, nil

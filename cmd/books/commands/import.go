@@ -80,7 +80,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 
 	outputTmplSrc := viper.GetString("output_template")
 	var err error
-	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper}).Parse(outputTmplSrc)
+	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join}).Parse(outputTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
 		os.Exit(1)
