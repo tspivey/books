@@ -97,7 +97,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		return err
 	}
 
-	rows, err := lib.Query("select id from books where hash=?", book.Hash)
+	rows, err := tx.Query("select id from books where hash=?", book.Hash)
 	if err != nil {
 		tx.Rollback()
 		return err
