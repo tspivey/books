@@ -182,7 +182,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 	// Index book for searching.
 	res, err = tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  filename, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, strings.Join(book.Authors, "&"), book.Series, book.Title, book.Extension, tags, book.CurrentFilename, book.Source)
+		id, strings.Join(book.Authors, " & "), book.Series, book.Title, book.Extension, tags, book.CurrentFilename, book.Source)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "Indexing book for search")
@@ -195,7 +195,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 	}
 
 	tx.Commit()
-	log.Printf("Imported book: %s: %s, ID = %d", strings.Join(book.Authors, "&"), book.Title, book.Id)
+	log.Printf("Imported book: %s: %s, ID = %d", strings.Join(book.Authors, " & "), book.Title, book.Id)
 
 	return nil
 }
