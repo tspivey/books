@@ -3,7 +3,6 @@ package books
 import (
 	"database/sql"
 	"database/sql/driver"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -355,11 +354,9 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 	}
 
 	// Get authors and tags
-	fmt.Println("Blah")
 	for i, book := range results {
 		results[i].Authors = authorMap[book.Id]
 		results[i].Tags = tagMap[book.Id]
-		fmt.Printf("Book: %+v\n", results[i])
 	}
 	err = tx.Commit()
 	if err != nil {
