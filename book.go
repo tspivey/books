@@ -77,7 +77,9 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	if mapping == nil {
 		return result, false
 	}
-	result.Authors = []string{mapping["author"]}
+	for _, author := range strings.Split(mapping["author"], " & ") {
+		result.Authors = append(result.Authors, strings.TrimSpace(author))
+	}
 	result.Title = mapping["title"]
 	result.Series = mapping["series"]
 	result.Extension = mapping["ext"]
