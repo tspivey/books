@@ -1,0 +1,7 @@
+default_regexps = ["series", "nonseries"]
+output_template = '''{{printf "%.1s" (index .Authors 0) | ToUpper}}/{{join .Authors "&"}}/{{join .Authors "&"}} - {{if .Series}}[{{.Series}}] - {{end}}{{.Title}}{{range .Tags}} ({{.}}){{end}}.{{.Extension}}'''
+[regexps]
+series = '''^(?P<author>.+?) - \[(?P<series>.+?)\] - (?P<title>.+)\.(?P<ext>.+)$'''
+nonseries = '''^(?P<author>.+?) - (?P<title>.+)\.(?P<ext>.+)$'''
+[server]
+bind = "0.0.0.0:8080"
