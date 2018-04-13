@@ -3,6 +3,7 @@ package books
 import (
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -309,60 +310,61 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 		return nil, nil
 	}
 
-tx, err := lib.Begin()
-if err != nil {
-return nil, errors.Wrap(err, "get books by ID")
-}
-	results := []Book{}
-	joined := strings.Repeat("?,", len(ids))
-	joined = joined[:len(joined)-1]
-	iids := make([]interface{}, 0)
-	for _, id := range ids {
-		iids = append(iids, id)
+	tx, err := lib.Begin()
+	if err != nil {
+		return nil, errors.Wrap(err, "get books by ID")
 	}
+	results := []Book{}
 
-	rows, err := tx.Query("select id, hash, series, title, extension, filename from books where id in ("+joined+")", iids...)
+	query, args, err := sqlx.In("select id, hash, series, title, extension, original_filename, filename, file_size, file_mtime, regexp_name, source from books where id in (?) ORDER BY file_mtime DESC", ids)
+	if err != nil {
+		tx.Rollback()
+		return nil, errors.Wrap(err, "build getBooksByIdsQuery")
+	}
+	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return results, errors.Wrap(err, "fetching books from database by ID")
 	}
 
 	for rows.Next() {
 		book := Book{}
-		if err := rows.Scan(&book.Id, &book.Hash, &book.Series, &book.Title, &book.Extension, &book.CurrentFilename); err != nil {
-tx.Rollback()
-			return results, errors.Wrap(err, "scanning rows")
+		if err := rows.Scan(&book.Id, &book.Hash, &book.Series, &book.Title, &book.Extension, &book.OriginalFilename, &book.CurrentFilename, &book.FileSize, &book.FileMtime, &book.RegexpName, &book.Source); err != nil {
+			tx.Rollback()
+			return nil, errors.Wrap(err, "scanning rows")
 		}
 
 		results = append(results, book)
 	}
 
 	if rows.Err() != nil {
-tx.Rollback()
-		return results, errors.Wrap(err, "querying books by ID")
+		tx.Rollback()
+		return nil, errors.Wrap(err, "querying books by ID")
 	}
 	rows.Close()
 
-authorMap, err := getAuthorsByBookIds(tx, ids)
-if err != nil {
-tx.Rollback()
-return nil, errors.Wrap(err, "get authors for books")
-}
+	authorMap, err := getAuthorsByBookIds(tx, ids)
+	if err != nil {
+		tx.Rollback()
+		return nil, errors.Wrap(err, "get authors for books")
+	}
 
-tagMap, err := getTagsByBookIds(tx, ids)
-if err != nil {
-tx.Rollback()
-return nil, errors.Wrap(err, "get tags for books")
-}
+	tagMap, err := getTagsByBookIds(tx, ids)
+	if err != nil {
+		tx.Rollback()
+		return nil, errors.Wrap(err, "get tags for books")
+	}
 
 	// Get authors and tags
+	fmt.Println("Blah")
 	for i, book := range results {
-results[i].Authors = authorMap[book.Id]
-results[i].Tags = tagMap[book.Id]
+		results[i].Authors = authorMap[book.Id]
+		results[i].Tags = tagMap[book.Id]
+		fmt.Printf("Book: %+v\n", results[i])
 	}
-err = tx.Commit()
-if err != nil {
-return nil, errors.Wrap(err, "get books by ID")
-}
+	err = tx.Commit()
+	if err != nil {
+		return nil, errors.Wrap(err, "get books by ID")
+	}
 	return results, nil
 }
 
@@ -372,31 +374,29 @@ func getAuthorsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 	if len(ids) == 0 {
 		return m, nil
 	}
-	iids := make([]interface{}, 0)
-	for _, id := range ids {
-		iids = append(iids, id)
-	}
 
 	var bookId int64
 	var authorName string
 
-	query, args, err := sqlx.In("SELECT ba.book_id, a.name FROM books_authors ba JOIN authors a ON ba.author_id = a.id WHERE ba.book_id IN (?)", iids)
+	query, args, err := sqlx.In("SELECT ba.book_id, a.name FROM books_authors ba JOIN authors a ON ba.author_id = a.id WHERE ba.book_id IN (?) ORDER BY ba.id", ids)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(query, args)
+	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		err := rows.Scan(&bookId, &authorName)
 		if err != nil {
 			return nil, err
 		}
-		authors, _ := m[bookId]
+		authors := m[bookId]
 		m[bookId] = append(authors, authorName)
 	}
+
 	return m, nil
 }
 
@@ -406,23 +406,20 @@ func getTagsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 	if len(ids) == 0 {
 		return m, nil
 	}
+
 	var bookId int64
 	var tag string
 
-	iids := make([]interface{}, 0)
-	for _, id := range ids {
-		iids = append(iids, id)
-	}
-
-	query, args, err := sqlx.In("SELECT bt.book_id, t.name FROM books_tags bt JOIN tags t ON bt.tag_id = t.id WHERE bt.book_id IN (?)", iids)
+	query, args, err := sqlx.In("SELECT bt.book_id, t.name FROM books_tags bt JOIN tags t ON bt.tag_id = t.id WHERE bt.book_id IN (?) ORDER BY bt.id", ids)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(query, args)
+	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		err := rows.Scan(&bookId, &tag)
 		if err != nil {
@@ -431,6 +428,7 @@ func getTagsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 		tags := m[bookId]
 		m[bookId] = append(tags, tag)
 	}
+
 	return m, nil
 }
 
