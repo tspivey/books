@@ -335,8 +335,8 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 	rows.Close()
 
 	// Get authors and tags
-	for _, book := range results {
-		rows, err = lib.Query("select name from authors where id=?", book.Id)
+	for i, book := range results {
+		rows, err = lib.Query("select authors.name from authors inner join books_authors on author_id = authors.id where book_id = ?", book.Id)
 		if err != nil {
 			return results, errors.Wrap(err, "selecting authors")
 		}
@@ -347,14 +347,14 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 				rows.Close()
 				return results, errors.Wrap(err, "selecting authors")
 			}
-			book.Authors = append(book.Authors, name)
+			results[i].Authors = append(results[i].Authors, name)
 		}
 		if rows.Err() != nil {
 			return results, errors.Wrap(err, "getting authors")
 		}
 		rows.Close()
 
-		rows, err = lib.Query("select name from tags where id=?", book.Id)
+		rows, err = lib.Query("select tags.name from tags inner join books_tags on tag_id = tags.id where book_id = ?", book.Id)
 		if err != nil {
 			return results, errors.Wrap(err, "selecting tags")
 		}
@@ -365,7 +365,7 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 				rows.Close()
 				return results, errors.Wrap(err, "selecting tags")
 			}
-			book.Tags = append(book.Tags, name)
+			results[i].Tags = append(results[i].Tags, name)
 		}
 		if rows.Err() != nil {
 			return results, errors.Wrap(err, "getting authors")
