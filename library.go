@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
+
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 )
@@ -307,6 +309,10 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 		return nil, nil
 	}
 
+tx, err := lib.Begin()
+if err != nil {
+return nil, errors.Wrap(err, "get books by ID")
+}
 	results := []Book{}
 	joined := strings.Repeat("?,", len(ids))
 	joined = joined[:len(joined)-1]
@@ -315,7 +321,7 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 		iids = append(iids, id)
 	}
 
-	rows, err := lib.Query("select id, hash, series, title, extension, filename from books where id in ("+joined+")", iids...)
+	rows, err := tx.Query("select id, hash, series, title, extension, filename from books where id in ("+joined+")", iids...)
 	if err != nil {
 		return results, errors.Wrap(err, "fetching books from database by ID")
 	}
@@ -323,6 +329,7 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 	for rows.Next() {
 		book := Book{}
 		if err := rows.Scan(&book.Id, &book.Hash, &book.Series, &book.Title, &book.Extension, &book.CurrentFilename); err != nil {
+tx.Rollback()
 			return results, errors.Wrap(err, "scanning rows")
 		}
 
@@ -330,51 +337,101 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 	}
 
 	if rows.Err() != nil {
+tx.Rollback()
 		return results, errors.Wrap(err, "querying books by ID")
 	}
 	rows.Close()
 
+authorMap, err := getAuthorsByBookIds(tx, ids)
+if err != nil {
+tx.Rollback()
+return nil, errors.Wrap(err, "get authors for books")
+}
+
+tagMap, err := getTagsByBookIds(tx, ids)
+if err != nil {
+tx.Rollback()
+return nil, errors.Wrap(err, "get tags for books")
+}
+
 	// Get authors and tags
 	for i, book := range results {
-		rows, err = lib.Query("select authors.name from authors inner join books_authors on author_id = authors.id where book_id = ?", book.Id)
-		if err != nil {
-			return results, errors.Wrap(err, "selecting authors")
-		}
-		for rows.Next() {
-			var name string
-			err := rows.Scan(&name)
-			if err != nil {
-				rows.Close()
-				return results, errors.Wrap(err, "selecting authors")
-			}
-			results[i].Authors = append(results[i].Authors, name)
-		}
-		if rows.Err() != nil {
-			return results, errors.Wrap(err, "getting authors")
-		}
-		rows.Close()
+results[i].Authors = authorMap[book.Id]
+results[i].Tags = tagMap[book.Id]
+	}
+err = tx.Commit()
+if err != nil {
+return nil, errors.Wrap(err, "get books by ID")
+}
+	return results, nil
+}
 
-		rows, err = lib.Query("select tags.name from tags inner join books_tags on tag_id = tags.id where book_id = ?", book.Id)
-		if err != nil {
-			return results, errors.Wrap(err, "selecting tags")
-		}
-		for rows.Next() {
-			var name string
-			err := rows.Scan(&name)
-			if err != nil {
-				rows.Close()
-				return results, errors.Wrap(err, "selecting tags")
-			}
-			results[i].Tags = append(results[i].Tags, name)
-		}
-		if rows.Err() != nil {
-			return results, errors.Wrap(err, "getting authors")
-		}
-		rows.Close()
-
+// getAuthorsByBookIds gets author names for each book ID.
+func getAuthorsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
+	m := make(map[int64][]string)
+	if len(ids) == 0 {
+		return m, nil
+	}
+	iids := make([]interface{}, 0)
+	for _, id := range ids {
+		iids = append(iids, id)
 	}
 
-	return results, nil
+	var bookId int64
+	var authorName string
+
+	query, args, err := sqlx.In("SELECT ba.book_id, a.name FROM books_authors ba JOIN authors a ON ba.author_id = a.id WHERE ba.book_id IN (?)", iids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(query, args)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&bookId, &authorName)
+		if err != nil {
+			return nil, err
+		}
+		authors, _ := m[bookId]
+		m[bookId] = append(authors, authorName)
+	}
+	return m, nil
+}
+
+// getTagsByBookIds gets tag names for each book ID.
+func getTagsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
+	m := make(map[int64][]string)
+	if len(ids) == 0 {
+		return m, nil
+	}
+	var bookId int64
+	var tag string
+
+	iids := make([]interface{}, 0)
+	for _, id := range ids {
+		iids = append(iids, id)
+	}
+
+	query, args, err := sqlx.In("SELECT bt.book_id, t.name FROM books_tags bt JOIN tags t ON bt.tag_id = t.id WHERE bt.book_id IN (?)", iids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(query, args)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&bookId, &tag)
+		if err != nil {
+			return nil, err
+		}
+		tags := m[bookId]
+		m[bookId] = append(tags, tag)
+	}
+	return m, nil
 }
 
 // ConvertToEpub converts a book to epub, and caches it in LIBRARY_ROOT/cache.
