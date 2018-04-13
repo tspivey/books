@@ -8,6 +8,8 @@ import (
 	"os"
 	"path"
 	"runtime/pprof"
+	"strings"
+	"text/template"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
@@ -19,6 +21,12 @@ var libraryFile string
 var booksRoot string
 var cpuProfile string
 var htpasswdFile string
+var funcMap = template.FuncMap{
+	"inc": func(i int) int {
+		return i + 1
+	},
+	"joinNaturally": joinNaturally,
+}
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -93,4 +101,17 @@ func CpuProfile(f func(cmd *cobra.Command, args []string)) func(cmd *cobra.Comma
 			fp.Close()
 		}
 	}
+}
+
+func joinNaturally(conjunction string, items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if len(items) == 1 {
+		return items[0]
+	}
+	if len(items) == 2 {
+		return fmt.Sprintf("%s %s %s", items[0], conjunction, items[1])
+	}
+	return fmt.Sprintf("%s, %s %s", strings.Join(items[:len(items)-1], ", "), conjunction, items[len(items)-1])
 }
