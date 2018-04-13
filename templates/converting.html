@@ -3,7 +3,7 @@
 {{ template "header" $title }}
 {{ template "searchform" }}
 <h1>Converting Book</h1>
-<p>Your book, {{ .Author }}: <em>{{ .Title }}</em>, is being converted. Please wait.</p>
+<p>Your book, {{ joinNaturally "and" .Authors }}: <em>{{ .Title }}</em>, is being converted. Please wait.</p>
 <p>This page will periodically reload to check progress. Once the conversion is complete, the download will start.</p>
 <p>Time till next reload: <span id="countdown"></span></p>
 <script>

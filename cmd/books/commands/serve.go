@@ -59,8 +59,8 @@ func runServer(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	templatesDir := path.Join(cfgDir, "templates")
-	templates = template.Must(template.ParseGlob(path.Join(templatesDir, "*.html")))
-
+	funcMap := template.FuncMap{"joinNaturally": joinNaturally}
+	templates = template.Must(template.New("template").Funcs(funcMap).ParseGlob(path.Join(templatesDir, "*.html")))
 	lib, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening library: %s\n", err)
