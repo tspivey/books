@@ -219,7 +219,8 @@ func insertAuthor(tx *sql.Tx, author string, book *Book) error {
 		return err
 	}
 	// Author inserted, insert the link
-	if _, err := tx.Exec("insert into books_authors (book_id, author_id) values(?, ?)", book.Id, authorId); err != nil {
+	// For two authors in the same book with the same name, only insert one.
+	if _, err := tx.Exec("insert or ignore into books_authors (book_id, author_id) values(?, ?)", book.Id, authorId); err != nil {
 		return err
 	}
 	return nil
@@ -244,7 +245,8 @@ func insertTag(tx *sql.Tx, tag string, book *Book) error {
 		return err
 	}
 	// Tag inserted, insert the link
-	if _, err := tx.Exec("insert into books_tags (book_id, tag_id) values(?, ?)", book.Id, tagId); err != nil {
+	// Avoid duplicate tags.
+	if _, err := tx.Exec("insert or ignore into books_tags (book_id, tag_id) values(?, ?)", book.Id, tagId); err != nil {
 		return err
 	}
 	return nil
