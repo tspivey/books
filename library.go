@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx"
-
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 )
@@ -31,7 +29,7 @@ create table files (
 id integer primary key,
 created_on timestamp not null default (datetime()),
 updated_on timestamp not null default (datetime()),
-book_id integer references books(id) on delete cascade,
+book_id integer references books(id) on delete cascade not null,
 extension text not null,
 original_filename text not null,
 filename text not null,
@@ -42,6 +40,7 @@ regexp_name text not null,
 template_override text,
 source text
 );
+create index idx_files_book_id on files(book_id);
 
 create table authors (
 id integer primary key,
@@ -389,12 +388,8 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 	}
 	results := []Book{}
 
-	query, args, err := sqlx.In("select id, series, title from books where id in (?)", ids)
-	if err != nil {
-		tx.Rollback()
-		return nil, errors.Wrap(err, "build getBooksByIdsQuery")
-	}
-	rows, err := tx.Query(query, args...)
+	query := "select id, series, title from books where id in (" + joinInt64s(ids, ",") + ")"
+	rows, err := tx.Query(query)
 	if err != nil {
 		return results, errors.Wrap(err, "fetching books from database by ID")
 	}
@@ -449,11 +444,8 @@ func getAuthorsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 	var bookId int64
 	var authorName string
 
-	query, args, err := sqlx.In("SELECT ba.book_id, a.name FROM books_authors ba JOIN authors a ON ba.author_id = a.id WHERE ba.book_id IN (?) ORDER BY ba.id", ids)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := tx.Query(query, args...)
+	query := "SELECT ba.book_id, a.name FROM books_authors ba JOIN authors a ON ba.author_id = a.id WHERE ba.book_id IN (" + joinInt64s(ids, ",") + ") ORDER BY ba.id"
+	rows, err := tx.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -481,11 +473,8 @@ func getTagsByFileIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 	var fileId int64
 	var tag string
 
-	query, args, err := sqlx.In("SELECT ft.file_id, t.name FROM files_tags ft JOIN tags t ON ft.tag_id = t.id WHERE ft.file_id IN (?) ORDER BY ft.id", ids)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := tx.Query(query, args...)
+	query := "SELECT ft.file_id, t.name FROM files_tags ft JOIN tags t ON ft.tag_id = t.id WHERE ft.file_id IN (" + joinInt64s(ids, ",") + ") ORDER BY ft.id"
+	rows, err := tx.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -510,11 +499,8 @@ func getFilesByBookIds(tx *sql.Tx, ids []int64) (fileMap map[int64][]BookFile, e
 	fileIdMap := make(map[int64][]int64)
 	fileMap = make(map[int64][]BookFile)
 
-	query, args, err := sqlx.In("select id, book_id from files where book_id in (?)", ids)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := tx.Query(query, args...)
+	query := "select id, book_id from files where book_id in (" + joinInt64s(ids, ",") + ")"
+	rows, err := tx.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -571,11 +557,8 @@ func getFilesById(tx *sql.Tx, ids []int64) ([]BookFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	query, args, err := sqlx.In("select id, extension, original_filename, filename, file_size, file_mtime, hash, regexp_name, source from files where id in (?)", ids)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := tx.Query(query, args...)
+	query := "select id, extension, original_filename, filename, file_size, file_mtime, hash, regexp_name, source from files where id in (" + joinInt64s(ids, ",") + ")"
+	rows, err := tx.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -720,4 +703,17 @@ func getBookIdByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	}
 
 	return 0, false, nil
+}
+
+// joinInt64s is like strings.Join, but for slices of int64.
+// SQLite limits the number of variables that can be passed to a bound query.
+// Pass int64s directly to IN (…) as a work-around.
+// query := “SELECT * FROM table WHERE id IN (“ + joinInt64s(ids, “,”) + “)”
+func joinInt64s(items []int64, sep string) string {
+	itemsStr := make([]string, len(items))
+	for i, item := range items {
+		itemsStr[i] = strconv.FormatInt(item, 10)
+	}
+
+	return strings.Join(itemsStr, sep)
 }
