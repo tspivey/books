@@ -3,6 +3,8 @@
 {{template "header" $title}}
 {{ template "searchform" }}
 <h2>Details for {{ joinNaturally "and" .Authors }} - {{ .Title }}</h2>
+{{ if .Series }}<p>Series: {{.Series}}</p>
+{{ end -}}
 {{ if .Files -}}
 <table id="files">
     <tr>
