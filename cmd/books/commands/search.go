@@ -15,7 +15,7 @@ import (
 
 // searchCmd represents the search command
 var searchCmd = &cobra.Command{
-	Use:   "search",
+	Use:   "search TERMS",
 	Short: "Search the library",
 	Long: `Search the library.
 By default, all fields are searched. This can be overridden with field:value.

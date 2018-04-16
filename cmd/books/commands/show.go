@@ -15,7 +15,7 @@ import (
 
 // showCmd represents the show command
 var showCmd = &cobra.Command{
-	Use:   "show",
+	Use:   "show BOOK_ID",
 	Short: "Show details for a book",
 	Long: `Show details and files for a book by its ID.
 
