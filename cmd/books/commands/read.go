@@ -17,6 +17,7 @@ import (
 )
 
 var reader string
+var justPrintFilename bool
 
 // readCmd represents the read command
 var readCmd = &cobra.Command{
@@ -57,6 +58,12 @@ func readRun(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, "More than one file found; exiting")
 		os.Exit(1)
 	}
+	filename := path.Join(booksRoot, files[0].CurrentFilename)
+
+	if justPrintFilename {
+		fmt.Println(filename)
+		return
+	}
 
 	if reader == "" {
 		reader = viper.GetString("readers." + strings.ToLower(files[0].Extension))
@@ -72,7 +79,6 @@ func readRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	filename := path.Join(booksRoot, files[0].CurrentFilename)
 	if err := exec.Command(reader, filename).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot read book: %s\n", err)
 		os.Exit(1)
@@ -83,4 +89,5 @@ func init() {
 	rootCmd.AddCommand(readCmd)
 
 	readCmd.Flags().StringVarP(&reader, "reader", "R", "", "Override reader from config file")
+	readCmd.Flags().BoolVarP(&justPrintFilename, "just-print-filename", "p", false, "Just print the filename and exit")
 }
