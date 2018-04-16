@@ -49,7 +49,7 @@ type libHandler struct {
 	lib           *books.Library
 	convertingMtx sync.Mutex
 	converting    map[int64]error // Holds book conversion status
-	bookCh        chan *books.Book
+	fileCh        chan *books.BookFile
 }
 
 func runServer(cmd *cobra.Command, args []string) {
@@ -70,7 +70,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	r := mux.NewRouter()
 	lh := libHandler{
 		lib:        lib,
-		bookCh:     make(chan *books.Book),
+		fileCh:     make(chan *books.BookFile),
 		converting: make(map[int64]error),
 	}
 
@@ -81,6 +81,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	log.Printf("Started %d workers for converting books", numConversionWorkers)
 
 	r.HandleFunc("/", indexHandler)
+	r.HandleFunc("/book/{id:\\d+}", lh.bookDetailsHandler)
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
 
@@ -109,58 +110,58 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
-	book_id := mux.Vars(r)["id"]
-	id, err := strconv.Atoi(book_id)
+	file_id := mux.Vars(r)["id"]
+	id, err := strconv.Atoi(file_id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	books, err := h.lib.GetBooksById([]int64{int64(id)})
+	files, err := h.lib.GetFilesById([]int64{int64(id)})
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	if len(books) == 0 {
-		render("error_page", w, errorPage{"Book not found", "That book doesn't exist in the library."})
+	if len(files) == 0 {
+		render("error_page", w, errorPage{"File not found", "That file doesn't exist in the library."})
 		return
 	}
-	book := books[0]
+	file := files[0]
 
-	fn := path.Join(booksRoot, book.CurrentFilename)
+	fn := path.Join(booksRoot, file.CurrentFilename)
 	base := path.Base(fn)
 	if _, err := os.Stat(fn); os.IsNotExist(err) {
-		log.Printf("Book %d is in the library but the file is missing: %s", book.Id, fn)
-		render("error_page", w, errorPage{"Cannot download book", "It looks like that book is in the library, but the file is missing."})
+		log.Printf("File %d is in the library but the file is missing: %s", file.Id, fn)
+		render("error_page", w, errorPage{"Cannot download file", "It looks like that file is in the library, but the file is missing."})
 		return
 	}
 
 	var epubFn string
 	if val, ok := r.URL.Query()["format"]; ok && val[0] == "epub" {
-		epubFn = path.Join(cacheDir, book.Hash+".epub")
+		epubFn = path.Join(cacheDir, file.Hash+".epub")
 		if _, err := os.Stat(epubFn); os.IsNotExist(err) {
 			h.convertingMtx.Lock()
-			err, converting := h.converting[book.Id]
+			err, converting := h.converting[file.Id]
 			h.convertingMtx.Unlock()
 			if !converting {
 				select {
-				case h.bookCh <- &book:
+				case h.fileCh <- &file:
 					w.Header().Set("Refresh", "15")
-					render("converting", w, book)
+					render("converting", w, file)
 				default:
 					render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
 				}
 				return
 			}
 			if err != nil {
-				render("error_page", w, errorPage{"Conversion error", "That book couldn't be converted."})
-				log.Printf("Book %d couldn't be converted: %s", book.Id, err)
+				render("error_page", w, errorPage{"Conversion error", "That file couldn't be converted."})
+				log.Printf("File %d couldn't be converted: %s", file.Id, err)
 				h.convertingMtx.Lock()
-				delete(h.converting, book.Id)
+				delete(h.converting, file.Id)
 				h.convertingMtx.Unlock()
 				return
 			}
 			w.Header().Set("Refresh", "15")
-			render("converting", w, book)
+			render("converting", w, file)
 			return
 		}
 
@@ -172,6 +173,28 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
 	http.ServeFile(w, r, fn)
+}
+
+func (h *libHandler) bookDetailsHandler(w http.ResponseWriter, r *http.Request) {
+	bookId := mux.Vars(r)["id"]
+	id, err := strconv.Atoi(bookId)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	books, err := h.lib.GetBooksById([]int64{int64(id)})
+	if err != nil {
+		log.Printf("Error getting books by ID: %s", err)
+		http.NotFound(w, r)
+		return
+	}
+	if len(books) == 0 {
+		render("error_page", w, errorPage{"Book not found", "That book doesn't exist in the library."})
+		return
+	}
+	book := books[0]
+
+	render("book_details", w, book)
 }
 
 type results struct {
@@ -215,7 +238,7 @@ func render(name string, w http.ResponseWriter, data interface{}) {
 
 // bookConverterWorker listens on h.booksCh for books to convert to epub.
 func bookConverterWorker(h *libHandler) {
-	for book := range h.bookCh {
+	for book := range h.fileCh {
 		// ok is true for _, ok := map[key] even for nil values.
 		// Add a nil error to signal that a conversion is taking place.
 		h.convertingMtx.Lock()

@@ -132,8 +132,8 @@ func importBook(path string, library *books.Library) error {
 	var matched bool
 	for i, c := range compiled {
 		if book, matched = books.ParseFilename(path, c); matched {
-			book.RegexpName = regexpNames[i]
-			book.OriginalFilename = path
+			book.Files[0].RegexpName = regexpNames[i]
+			book.Files[0].OriginalFilename = path
 			break
 		}
 	}
@@ -143,26 +143,26 @@ func importBook(path string, library *books.Library) error {
 
 	title, tags := books.SplitTitleAndTags(book.Title)
 	book.Title = title
-	book.Tags = tags
+	book.Files[0].Tags = tags
 
 	fi, err := os.Stat(path)
 	if err != nil {
 		return errors.Wrap(err, "Get file info for book")
 	}
-	book.FileSize = fi.Size()
-	book.FileMtime = fi.ModTime()
+	book.Files[0].FileSize = fi.Size()
+	book.Files[0].FileMtime = fi.ModTime()
 
-	err = book.CalculateHash()
+	err = book.Files[0].CalculateHash()
 	if err != nil {
 		return errors.Wrap(err, "Calculate book hash")
 	}
 
-	s, err := book.Filename(outputTmpl)
+	s, err := book.Files[0].Filename(outputTmpl, &book)
 	if err != nil {
 		return errors.Wrap(err, "Calculate output filename for book")
 	}
-	book.CurrentFilename = books.GetUniqueName(s)
-	fmt.Printf("Using regexp name: %s\n", book.RegexpName)
+	book.Files[0].CurrentFilename = books.GetUniqueName(s)
+	fmt.Printf("Using regexp name: %s\n", book.Files[0].RegexpName)
 
 	if err := library.ImportBook(book, viper.GetBool("move")); err != nil {
 		return errors.Wrap(err, "Import book into library")

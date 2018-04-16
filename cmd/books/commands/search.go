@@ -42,12 +42,8 @@ func searchRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	resultTmplSrc := `{{range $i, $v := . -}}
-{{inc $i}}: {{joinNaturally "and" $v.Authors}} - {{$v.Title -}}
-{{if $v.Series}} [{{$v.Series}}]{{end -}}
-{{if $v.Tags}}({{range $i, $v := .Tags -}}
-{{if $i}}, {{end -}}
-{{$v}}{{end}}){{end -}}
-.{{$v.Extension}}
+{{joinNaturally "and" $v.Authors}} - {{$v.Title -}}
+{{if $v.Series}} [{{$v.Series}}]{{end -}} ({{ $v.Id }})
 {{end}}`
 
 	tmpl, err := template.New("search_result").Funcs(funcMap).Parse(resultTmplSrc)

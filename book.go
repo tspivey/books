@@ -21,10 +21,15 @@ var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
 // Book represents a book in a library.
 type Book struct {
+	Id      int64
+	Authors []string
+	Title   string
+	Series  string
+	Files   []BookFile
+}
+
+type BookFile struct {
 	Id               int64
-	Authors          []string
-	Title            string
-	Series           string
 	Extension        string
 	Tags             []string
 	Hash             string
@@ -37,9 +42,14 @@ type Book struct {
 }
 
 // Filename retrieves a book's correct filename, based on the given output template.
-func (b Book) Filename(tmpl *template.Template) (string, error) {
+func (b *BookFile) Filename(tmpl *template.Template, book *Book) (string, error) {
 	var fnBuff bytes.Buffer
-	if err := tmpl.Execute(&fnBuff, b); err != nil {
+	type FilenameTemplate struct {
+		Book
+		BookFile
+	}
+	ft := FilenameTemplate{*book, *b}
+	if err := tmpl.Execute(&fnBuff, ft); err != nil {
 		return "", errors.Wrap(err, "Retrieve formatted filename for book")
 	}
 	return fnBuff.String(), nil
@@ -47,7 +57,7 @@ func (b Book) Filename(tmpl *template.Template) (string, error) {
 
 // CalculateHash calculates the hash of b.OriginalFilename and updates book.Hash.
 // If a value is stored in the user.hash xattr, that value will be used instead of hashing the file's contents.
-func (b *Book) CalculateHash() error {
+func (b *BookFile) CalculateHash() error {
 	if data, err := xattr.Get(b.OriginalFilename, "user.hash"); err == nil {
 		b.Hash = string(data)
 		return nil
@@ -72,6 +82,7 @@ func (b *Book) CalculateHash() error {
 // The named groups author, title, series, and extension in the regular expression will map to their respective fields in the resulting book.
 func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	result := Book{}
+	bf := BookFile{}
 	filename = path.Base(filename)
 	mapping := re2map(filename, re)
 	if mapping == nil {
@@ -82,7 +93,8 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	}
 	result.Title = mapping["title"]
 	result.Series = mapping["series"]
-	result.Extension = mapping["ext"]
+	bf.Extension = mapping["ext"]
+	result.Files = append(result.Files, bf)
 	return result, true
 }
 

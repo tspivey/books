@@ -1,0 +1,28 @@
+{{define "book_details"}}
+{{$title := printf "Details for %s - %s" (joinNaturally "and" .Authors) .Title }}
+{{template "header" $title}}
+{{ template "searchform" }}
+<h2>Details for {{ joinNaturally "and" .Authors }} - {{ .Title }}</h2>
+{{ if .Files -}}
+<table id="files">
+    <tr>
+        <th>Format</th>
+        <th>Tags</th>
+        <th>Download</th>
+        <th>Convert</th>
+    </tr>
+{{ range $v := .Files -}}
+    <tr>
+        <td>{{ $v.Extension }}</td>
+        <td>{{ if $v.Tags }}{{ range $i, $v := $v.Tags }}{{ if $i}}, {{end}}{{ $v }}{{end}}{{end }}</td>
+        <td><a href="/download/{{ $v.Id }}">Download</a></td>
+        <td>{{if eq $v.Extension "mobi" "azw3" "lit" -}}
+            <a href="/download/{{ .Id }}?format=epub">Convert to epub</a>{{ end }}</td>
+    </tr>
+{{end -}}
+</table>
+{{ else -}}
+<p>No files are available for this book.</p>
+{{ end }}
+{{template "footer"}}
+{{end}}
