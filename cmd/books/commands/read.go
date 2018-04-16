@@ -79,7 +79,7 @@ func readRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	if err := exec.Command(reader, filename).Run(); err != nil {
+	if err := exec.Command(reader, filename).Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot read book: %s\n", err)
 		os.Exit(1)
 	}
