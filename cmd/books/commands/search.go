@@ -32,7 +32,7 @@ func searchRun(cmd *cobra.Command, args []string) {
 	terms := strings.Join(args, " ")
 	lib, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot open library: %s", err)
+		fmt.Fprintf(os.Stderr, "Cannot open library: %s\n", err)
 		os.Exit(1)
 	}
 
