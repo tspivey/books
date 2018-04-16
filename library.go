@@ -575,13 +575,13 @@ func getFilesById(tx *sql.Tx, ids []int64) ([]BookFile, error) {
 	return files, nil
 }
 
-// ConvertToEpub converts a book to epub, and caches it in LIBRARY_ROOT/cache.
+// ConvertToEpub converts a file to epub, and caches it in LIBRARY_ROOT/cache.
 // This depends on ebook-convert, which takes the original filename, and the new filename, in that order.
-// the book's current hash, with the extension .epub, will be the name of the cached file.
-func (lib *Library) ConvertToEpub(book BookFile) error {
-	filename := path.Join(lib.booksRoot, book.CurrentFilename)
+// the file's hash, with the extension .epub, will be the name of the cached file.
+func (lib *Library) ConvertToEpub(file BookFile) error {
+	filename := path.Join(lib.booksRoot, file.CurrentFilename)
 	cacheDir := path.Join(path.Dir(lib.filename), "cache")
-	newFile := path.Join(cacheDir, book.Hash+".epub")
+	newFile := path.Join(cacheDir, file.Hash+".epub")
 	cmd := exec.Command("ebook-convert", filename, newFile)
 	if err := cmd.Run(); err != nil {
 		return err
