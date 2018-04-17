@@ -3,6 +3,7 @@
 {{template "header" $title}}
 {{ template "searchform" . }}
 <h2>Search results for {{ .Query }}</h2>
+<div id="results-display" style="display:inline-block; float:left;width: 80%">
 {{ if .Books -}}
 <table id="results">
     <tr>
@@ -21,5 +22,15 @@
 {{ else -}}
 <p>Nothing found</p>
 {{ end }}
+</div>
+<div id="page-nav" style="display:inline-block; float: left; width:20%">
+    <ul>
+        <li>{{ if .Prev }}<a href="/search/?query={{ .Query }}&page={{ .Prev}}">&lt;Prev</a>{{ else }}&lt;Prev{{ end }}</li>
+        {{ range .PageLinks -}}
+        <li>{{ if eq $.PageNumber . }}{{ . }}{{ else }}<a href="/search/?query={{ $.Query }}&page={{ .}}">{{ . }}</a>{{ end }}</li>
+        {{ end -}}
+        <li>{{ if .Next }}<a href="/search/?query={{ .Query }}&page={{ .Next}}">Next&gt;</a>{{ else }}Next&gt;{{ end }}</li>
+    </ul>
+</div>
 {{template "footer"}}
 {{end}}

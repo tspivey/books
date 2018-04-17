@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path"
@@ -198,8 +199,12 @@ func (h *libHandler) bookDetailsHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 type results struct {
-	Books []books.Book
-	Query string
+	Books      []books.Book
+	PageNumber int
+	Prev       int
+	Next       int
+	PageLinks  []int
+	Query      string
 }
 
 type errorPage struct {
@@ -208,20 +213,56 @@ type errorPage struct {
 }
 
 func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
+	pageNumber, offset, limit := 1, 0, 20
+	maxPageLinks := 10
 	val, ok := r.URL.Query()["query"]
 	if !ok {
 		http.Redirect(w, r, "/", 301)
 		return
 	}
+	if pageStrs, ok := r.URL.Query()["page"]; ok {
+		if page, err := strconv.Atoi(pageStrs[0]); err == nil && page >= 1 {
+			pageNumber = page
+			offset = (pageNumber - 1) * limit // Pages start from 1, offsets from 0.
+		}
+	}
 
-	books, err := h.lib.Search(val[0])
+	books, moreResults, err := h.lib.SearchPaged(val[0], offset, limit, limit*(maxPageLinks-1))
 	if err != nil {
 		log.Printf("Error searching for %s: %s", val[0], err)
 		render("error_page", w, errorPage{"Error while searching", "An error occurred while searching."})
 		return
 	}
 
-	res := results{Books: books, Query: val[0]}
+	morePages := int(math.Ceil(float64(moreResults) / float64(limit)))
+	firstPageLink := pageNumber - int(math.Ceil(float64(maxPageLinks)/2)) + 1
+	if firstPageLink < 1 {
+		firstPageLink = 1
+	}
+	lastPageLink := maxPageLinks/2 + pageNumber
+	if lastPageLink < maxPageLinks {
+		lastPageLink = maxPageLinks
+	}
+	if lastPageLink > pageNumber+morePages {
+		lastPageLink = pageNumber + morePages
+	}
+	pageLinks := make([]int, 0)
+	for i := firstPageLink; i <= lastPageLink; i++ {
+		pageLinks = append(pageLinks, i)
+	}
+	nextPage := 0
+	if morePages > 0 {
+		nextPage = pageNumber + 1
+	}
+
+	res := results{
+		Books:      books,
+		PageNumber: pageNumber,
+		Prev:       pageNumber - 1,
+		Next:       nextPage,
+		PageLinks:  pageLinks,
+		Query:      val[0],
+	}
 	render("results", w, res)
 }
 

@@ -351,10 +351,27 @@ func (lib *Library) moveOrCopyFile(book Book, move bool) error {
 // Fields: author, title, series, extension, tags, filename, source.
 // Example: author:Stephen+King title:Shining
 func (lib *Library) Search(terms string) ([]Book, error) {
-	results := []Book{}
-	rows, err := lib.Query("select docid from books_fts where books_fts match ?", terms)
+	books, _, err := lib.SearchPaged(terms, 0, 0, 0)
+	return books, err
+}
+
+// searchPaged implements book searching, both paged and non paged.
+// Set limit to 0 to return all results.
+// moreResults will be set to the number of additional results not returned, with a maximum of moreResultsLimit.
+func (lib *Library) SearchPaged(terms string, offset, limit, moreResultsLimit int) (books []Book, moreResults int, err error) {
+	books = []Book{}
+	var query string
+	args := []interface{}{terms}
+	if limit == 0 {
+		query = "select docid from books_fts where books_fts match ?"
+	} else {
+		query = "select docid from books_fts where books_fts match ? LIMIT ? OFFSET ?"
+		args = append(args, limit+moreResultsLimit, offset)
+	}
+
+	rows, err := lib.Query(query, args...)
 	if err != nil {
-		return results, errors.Wrap(err, "Querying db for search terms")
+		return nil, 0, errors.Wrap(err, "Querying db for search terms")
 	}
 
 	var ids []int64
@@ -365,15 +382,16 @@ func (lib *Library) Search(terms string) ([]Book, error) {
 	}
 	err = rows.Err()
 	if err != nil {
-		return results, errors.Wrap(err, "Retrieving search results from db")
+		return nil, 0, errors.Wrap(err, "Retrieving search results from db")
 	}
 
-	results, err = lib.GetBooksById(ids)
-	if err != nil {
-		return results, err
+	if limit > 0 && len(ids) > limit {
+		moreResults = len(ids) - limit
+		ids = ids[:limit]
 	}
+	books, err = lib.GetBooksById(ids)
 
-	return results, nil
+	return
 }
 
 // GetBooksById retrieves books from the library by their id.
