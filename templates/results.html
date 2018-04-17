@@ -23,6 +23,7 @@
 <p>Nothing found</p>
 {{ end }}
 </div>
+{{ if not (eq .Prev .Next) -}}
 <div id="page-nav" style="display:inline-block; float: left; width:20%">
     <ul>
         <li>{{ if .Prev }}<a href="/search/?query={{ .Query }}&page={{ .Prev}}">&lt;Prev</a>{{ else }}&lt;Prev{{ end }}</li>
@@ -32,5 +33,6 @@
         <li>{{ if .Next }}<a href="/search/?query={{ .Query }}&page={{ .Next}}">Next&gt;</a>{{ else }}Next&gt;{{ end }}</li>
     </ul>
 </div>
+{{ end -}}
 {{template "footer"}}
 {{end}}
