@@ -20,8 +20,11 @@ import (
 	"github.com/pkg/xattr"
 )
 
-// Version is the version of books.
+// Version is the version of Books.
 var Version = "unset"
+
+// Copyright is the copyright including authors of Books.
+var Copyright = "Copyright © 2018 Tyler Spivey <tspivey@pcdesk.net> and Niko Carpenter <nikoacarpenter@gmail.com>"
 var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
 // Book represents a book in a library.

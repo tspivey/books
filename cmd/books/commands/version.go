@@ -17,7 +17,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version of Books",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Books version %s\n", books.Version)
+		fmt.Printf("Books version %s\n%s\n", books.Version, books.Copyright)
 	},
 }
 
