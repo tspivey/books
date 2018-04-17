@@ -17,9 +17,9 @@
     <tr>
         <td>{{ $v.Extension }}</td>
         <td>{{ if $v.Tags }}{{ range $i, $v := $v.Tags }}{{ if $i}}, {{end}}{{ $v }}{{end}}{{end }}</td>
-        <td><a href="/download/{{ $v.Id }}">Download</a></td>
+        <td><a href="/download/{{ $v.ID }}">Download</a></td>
         <td>{{if eq $v.Extension "mobi" "azw3" "lit" -}}
-            <a href="/download/{{ .Id }}?format=epub">Convert to epub</a>{{ end }}</td>
+            <a href="/download/{{ .ID }}?format=epub">Convert to epub</a>{{ end }}</td>
     </tr>
 {{end -}}
 </table>

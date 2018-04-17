@@ -13,7 +13,7 @@
     </tr>
 {{ range $v := .Books -}}
     <tr>
-        <td><a href="/book/{{ $v.Id }}">{{ $v.Title }}</a></td>
+        <td><a href="/book/{{ $v.ID }}">{{ $v.Title }}</a></td>
         <td>{{ joinNaturally "and" $v.Authors }}</td>
         <td>{{ $v.Series }}</td>
     </tr>
