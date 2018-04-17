@@ -26,7 +26,7 @@ var readCmd = &cobra.Command{
 	Use:   "read FILE_ID",
 	Short: "Read a book",
 	Long:  `Read a book given a file ID in the configured reader.`,
-	Run:   CpuProfile(readRun),
+	Run:   CPUProfile(readRun),
 }
 
 func readRun(cmd *cobra.Command, args []string) {
@@ -35,7 +35,7 @@ func readRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	fileId, err := strconv.Atoi(args[0])
+	fileID, err := strconv.Atoi(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "File ID must be a number.")
 		os.Exit(1)
@@ -47,7 +47,7 @@ func readRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	files, err := lib.GetFilesById([]int64{int64(fileId)})
+	files, err := lib.GetFilesByID([]int64{int64(fileID)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error while getting file by id: %s\n", err)
 		os.Exit(1)

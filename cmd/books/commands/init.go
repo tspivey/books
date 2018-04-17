@@ -12,7 +12,7 @@ import (
 	"github.com/tspivey/books"
 )
 
-var overrideExistingLibrary bool = false
+var overrideExistingLibrary = false
 
 // initCmd represents the init command
 var initCmd = &cobra.Command{

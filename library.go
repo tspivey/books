@@ -163,7 +163,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		return errors.Wrapf(err, "Searching for duplicate book by hash %s", bf.Hash)
 	}
 
-	existingBookId, found, err := getBookIdByTitleAndAuthors(tx, book.Title, book.Authors)
+	existingBookID, found, err := getBookIDByTitleAndAuthors(tx, book.Title, book.Authors)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "find existing book")
@@ -174,7 +174,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 			tx.Rollback()
 			return errors.Wrap(err, "Insert new book")
 		}
-		book.Id, err = res.LastInsertId()
+		book.ID, err = res.LastInsertId()
 		if err != nil {
 			return errors.Wrap(err, "sett new book ID")
 		}
@@ -186,12 +186,12 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		}
 
 	} else {
-		book.Id = existingBookId
+		book.ID = existingBookID
 	}
 
 	res, err := tx.Exec(`insert into files (book_id, extension, original_filename, filename, file_size, file_mtime, hash, regexp_name, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		book.Id, bf.Extension, bf.OriginalFilename, bf.CurrentFilename, bf.FileSize, bf.FileMtime, bf.Hash, bf.RegexpName, bf.Source)
+		book.ID, bf.Extension, bf.OriginalFilename, bf.CurrentFilename, bf.FileSize, bf.FileMtime, bf.Hash, bf.RegexpName, bf.Source)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "Inserting book file into the db")
@@ -202,7 +202,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		tx.Rollback()
 		return errors.Wrap(err, "Fetching new book ID")
 	}
-	bf.Id = id
+	bf.ID = id
 
 	for _, tag := range bf.Tags {
 		if err := insertTag(tx, tag, &bf); err != nil {
@@ -224,7 +224,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 	}
 
 	tx.Commit()
-	log.Printf("Imported book: %s: %s, ID = %d", strings.Join(book.Authors, " & "), book.Title, book.Id)
+	log.Printf("Imported book: %s: %s, ID = %d", strings.Join(book.Authors, " & "), book.Title, book.ID)
 
 	return nil
 }
@@ -239,13 +239,13 @@ func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
 		// Index book for searching.
 		_, err := tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  source)
 	values (?, ?, ?, ?, ?, ?, ?)`,
-			book.Id, strings.Join(book.Authors, " & "), book.Series, book.Title, bf.Extension, joinedTags, bf.Source)
+			book.ID, strings.Join(book.Authors, " & "), book.Series, book.Title, bf.Extension, joinedTags, bf.Source)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
-	rows, err := tx.Query("select docid, tags, extension, source from books_fts where docid=?", book.Id)
+	rows, err := tx.Query("select docid, tags, extension, source from books_fts where docid=?", book.ID)
 	if err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
 		if rows.Err() != nil {
 			return err
 		}
-		return errors.Errorf("Existing book %d not found in FTS", book.Id)
+		return errors.Errorf("Existing book %d not found in FTS", book.ID)
 	}
 	var id int64
 	var tags, extension, source string
@@ -273,16 +273,16 @@ func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
 
 // insertAuthor inserts an author into the database.
 func insertAuthor(tx *sql.Tx, author string, book *Book) error {
-	var authorId int64
+	var authorID int64
 	row := tx.QueryRow("select id from authors where name=?", author)
-	err := row.Scan(&authorId)
+	err := row.Scan(&authorID)
 	if err == sql.ErrNoRows {
 		// Insert the author
 		res, err := tx.Exec("insert into authors (name) values(?)", author)
 		if err != nil {
 			return err
 		}
-		authorId, err = res.LastInsertId()
+		authorID, err = res.LastInsertId()
 		if err != nil {
 			return err
 		}
@@ -291,7 +291,7 @@ func insertAuthor(tx *sql.Tx, author string, book *Book) error {
 	}
 	// Author inserted, insert the link
 	// For two authors in the same book with the same name, only insert one.
-	if _, err := tx.Exec("insert or ignore into books_authors (book_id, author_id) values(?, ?)", book.Id, authorId); err != nil {
+	if _, err := tx.Exec("insert or ignore into books_authors (book_id, author_id) values(?, ?)", book.ID, authorID); err != nil {
 		return err
 	}
 	return nil
@@ -299,16 +299,16 @@ func insertAuthor(tx *sql.Tx, author string, book *Book) error {
 
 // insertTag inserts a tag into the database.
 func insertTag(tx *sql.Tx, tag string, bf *BookFile) error {
-	var tagId int64
+	var tagID int64
 	row := tx.QueryRow("select id from tags where name=?", tag)
-	err := row.Scan(&tagId)
+	err := row.Scan(&tagID)
 	if err == sql.ErrNoRows {
 		// Insert the tag
 		res, err := tx.Exec("insert into tags (name) values(?)", tag)
 		if err != nil {
 			return err
 		}
-		tagId, err = res.LastInsertId()
+		tagID, err = res.LastInsertId()
 		if err != nil {
 			return err
 		}
@@ -317,7 +317,7 @@ func insertTag(tx *sql.Tx, tag string, bf *BookFile) error {
 	}
 	// Tag inserted, insert the link
 	// Avoid duplicate tags.
-	if _, err := tx.Exec("insert or ignore into files_tags (file_id, tag_id) values(?, ?)", bf.Id, tagId); err != nil {
+	if _, err := tx.Exec("insert or ignore into files_tags (file_id, tag_id) values(?, ?)", bf.ID, tagID); err != nil {
 		return err
 	}
 	return nil
@@ -359,7 +359,7 @@ func (lib *Library) Search(terms string) ([]Book, error) {
 	return books, err
 }
 
-// searchPaged implements book searching, both paged and non paged.
+// SearchPaged implements book searching, both paged and non paged.
 // Set limit to 0 to return all results.
 // moreResults will be set to the number of additional results not returned, with a maximum of moreResultsLimit.
 func (lib *Library) SearchPaged(terms string, offset, limit, moreResultsLimit int) (books []Book, moreResults int, err error) {
@@ -393,13 +393,13 @@ func (lib *Library) SearchPaged(terms string, offset, limit, moreResultsLimit in
 		moreResults = len(ids) - limit
 		ids = ids[:limit]
 	}
-	books, err = lib.GetBooksById(ids)
+	books, err = lib.GetBooksByID(ids)
 
 	return
 }
 
-// GetBooksById retrieves books from the library by their id.
-func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
+// GetBooksByID retrieves books from the library by their id.
+func (lib *Library) GetBooksByID(ids []int64) ([]Book, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -418,7 +418,7 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 
 	for rows.Next() {
 		book := Book{}
-		if err := rows.Scan(&book.Id, &book.Series, &book.Title); err != nil {
+		if err := rows.Scan(&book.ID, &book.Series, &book.Title); err != nil {
 			tx.Rollback()
 			return nil, errors.Wrap(err, "scanning rows")
 		}
@@ -446,8 +446,8 @@ func (lib *Library) GetBooksById(ids []int64) ([]Book, error) {
 
 	// Get authors and files
 	for i, book := range results {
-		results[i].Authors = authorMap[book.Id]
-		results[i].Files = fileMap[book.Id]
+		results[i].Authors = authorMap[book.ID]
+		results[i].Files = fileMap[book.ID]
 	}
 	err = tx.Commit()
 	if err != nil {
@@ -463,7 +463,7 @@ func getAuthorsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 		return m, nil
 	}
 
-	var bookId int64
+	var bookID int64
 	var authorName string
 
 	query := "SELECT ba.book_id, a.name FROM books_authors ba JOIN authors a ON ba.author_id = a.id WHERE ba.book_id IN (" + joinInt64s(ids, ",") + ") ORDER BY ba.id"
@@ -474,12 +474,12 @@ func getAuthorsByBookIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		err := rows.Scan(&bookId, &authorName)
+		err := rows.Scan(&bookID, &authorName)
 		if err != nil {
 			return nil, err
 		}
-		authors := m[bookId]
-		m[bookId] = append(authors, authorName)
+		authors := m[bookID]
+		m[bookID] = append(authors, authorName)
 	}
 
 	return m, nil
@@ -492,7 +492,7 @@ func getTagsByFileIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 		return nil, nil
 	}
 
-	var fileId int64
+	var fileID int64
 	var tag string
 
 	query := "SELECT ft.file_id, t.name FROM files_tags ft JOIN tags t ON ft.tag_id = t.id WHERE ft.file_id IN (" + joinInt64s(ids, ",") + ") ORDER BY ft.id"
@@ -503,11 +503,11 @@ func getTagsByFileIds(tx *sql.Tx, ids []int64) (map[int64][]string, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		err := rows.Scan(&fileId, &tag)
+		err := rows.Scan(&fileID, &tag)
 		if err != nil {
 			return nil, err
 		}
-		tagsMap[fileId] = append(tagsMap[fileId], tag)
+		tagsMap[fileID] = append(tagsMap[fileID], tag)
 	}
 
 	return tagsMap, nil
@@ -518,7 +518,7 @@ func getFilesByBookIds(tx *sql.Tx, ids []int64) (fileMap map[int64][]BookFile, e
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	fileIdMap := make(map[int64][]int64)
+	fileIDMap := make(map[int64][]int64)
 	fileMap = make(map[int64][]BookFile)
 
 	query := "select id, book_id from files where book_id in (" + joinInt64s(ids, ",") + ")"
@@ -528,28 +528,28 @@ func getFilesByBookIds(tx *sql.Tx, ids []int64) (fileMap map[int64][]BookFile, e
 	}
 	defer rows.Close()
 
-	var bookId, fileId int64
+	var bookID, fileID int64
 	for rows.Next() {
-		err := rows.Scan(&fileId, &bookId)
+		err := rows.Scan(&fileID, &bookID)
 		if err != nil {
 			return nil, err
 		}
-		fileIdMap[bookId] = append(fileIdMap[bookId], fileId)
+		fileIDMap[bookID] = append(fileIDMap[bookID], fileID)
 	}
 
-	for bookId, fileIds := range fileIdMap {
-		files, err := getFilesById(tx, fileIds)
+	for bookID, fileIDs := range fileIDMap {
+		files, err := getFilesByID(tx, fileIDs)
 		if err != nil {
 			return nil, err
 		}
-		fileMap[bookId] = files
+		fileMap[bookID] = files
 	}
 
 	return fileMap, nil
 }
 
-// GetFilesById gets files for each ID.
-func (lib *Library) GetFilesById(ids []int64) ([]BookFile, error) {
+// GetFilesByID gets files for each ID.
+func (lib *Library) GetFilesByID(ids []int64) ([]BookFile, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -559,7 +559,7 @@ func (lib *Library) GetFilesById(ids []int64) ([]BookFile, error) {
 		return nil, err
 	}
 
-	files, err := getFilesById(tx, ids)
+	files, err := getFilesByID(tx, ids)
 	if err != nil {
 		tx.Rollback()
 	} else {
@@ -570,7 +570,7 @@ func (lib *Library) GetFilesById(ids []int64) ([]BookFile, error) {
 }
 
 // GetFilesById gets files for each ID.
-func getFilesById(tx *sql.Tx, ids []int64) ([]BookFile, error) {
+func getFilesByID(tx *sql.Tx, ids []int64) ([]BookFile, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -587,11 +587,11 @@ func getFilesById(tx *sql.Tx, ids []int64) ([]BookFile, error) {
 	defer rows.Close()
 	for rows.Next() {
 		bf := BookFile{}
-		err := rows.Scan(&bf.Id, &bf.Extension, &bf.OriginalFilename, &bf.CurrentFilename, &bf.FileSize, &bf.FileMtime, &bf.Hash, &bf.RegexpName, &bf.Source)
+		err := rows.Scan(&bf.ID, &bf.Extension, &bf.OriginalFilename, &bf.CurrentFilename, &bf.FileSize, &bf.FileMtime, &bf.Hash, &bf.RegexpName, &bf.Source)
 		if err != nil {
 			return nil, err
 		}
-		bf.Tags = tagMap[bf.Id]
+		bf.Tags = tagMap[bf.ID]
 		files = append(files, bf)
 	}
 	return files, nil
@@ -682,7 +682,7 @@ func GetUniqueName(f string) string {
 	return newName
 }
 
-func getBookIdByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int64, bool, error) {
+func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int64, bool, error) {
 	rows, err := tx.Query("SELECT id FROM books WHERE title = ?", title)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "get book by title")
@@ -718,9 +718,9 @@ func getBookIdByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 		return true
 	}
 
-	for bookId, authorNames := range authorMap {
+	for bookID, authorNames := range authorMap {
 		if authorsEqual(authors, authorNames) {
-			return bookId, true, nil
+			return bookID, true, nil
 		}
 	}
 

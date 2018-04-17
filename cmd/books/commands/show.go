@@ -22,7 +22,7 @@ var showCmd = &cobra.Command{
 	Long: `Show details and files for a book by its ID.
 
 Use search to find the ID of the book you want to show.`,
-	Run: CpuProfile(showRun),
+	Run: CPUProfile(showRun),
 }
 
 func showRun(cmd *cobra.Command, args []string) {
@@ -31,7 +31,7 @@ func showRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	bookId, err := strconv.Atoi(args[0])
+	bookID, err := strconv.Atoi(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Book ID must be a number.")
 		os.Exit(1)
@@ -43,7 +43,7 @@ func showRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	books, err := lib.GetBooksById([]int64{int64(bookId)})
+	books, err := lib.GetBooksByID([]int64{int64(bookID)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error while getting book by id: %s\n", err)
 		os.Exit(1)

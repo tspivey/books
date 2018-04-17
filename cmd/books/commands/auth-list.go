@@ -36,7 +36,7 @@ func listUsers(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Cannot list users: %s\n", err)
 		os.Exit(1)
 	}
-	for user, _ := range passwords {
+	for user := range passwords {
 		fmt.Println(user)
 	}
 }

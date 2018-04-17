@@ -20,20 +20,22 @@ import (
 	"github.com/pkg/xattr"
 )
 
+// Version is the version of books.
 var Version = "unset"
 var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
 // Book represents a book in a library.
 type Book struct {
-	Id      int64
+	ID      int64
 	Authors []string
 	Title   string
 	Series  string
 	Files   []BookFile
 }
 
+// BookFile represents a file linked to a book.
 type BookFile struct {
-	Id               int64
+	ID               int64
 	Extension        string
 	Tags             []string
 	Hash             string

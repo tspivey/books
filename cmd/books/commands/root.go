@@ -86,8 +86,8 @@ func initConfig() {
 	booksRoot = viper.GetString("root")
 }
 
-// CpuProfile wraps a cobra command for CPU profiling.
-func CpuProfile(f func(cmd *cobra.Command, args []string)) func(cmd *cobra.Command, args []string) {
+// CPUProfile wraps a cobra command for CPU profiling.
+func CPUProfile(f func(cmd *cobra.Command, args []string)) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		var fp *os.File
 		if cpuProfile != "" {

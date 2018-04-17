@@ -27,7 +27,7 @@ Examples:
     Wizard's First Rule
     series:Sword+of+Truth
     author:Terry+Goodkind title:Phantom`,
-	Run: CpuProfile(searchRun),
+	Run: CPUProfile(searchRun),
 }
 
 func searchRun(cmd *cobra.Command, args []string) {

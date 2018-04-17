@@ -39,7 +39,7 @@ Each file will be matched against the list of regular expressions in order, and 
 The following named groups will be recognized: author, series, title, and ext.
 Your files will be named according to the output template in the config file,
 or the template override set in the library.`,
-	Run: CpuProfile(importFunc),
+	Run: CPUProfile(importFunc),
 }
 
 func init() {
