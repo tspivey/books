@@ -14,7 +14,7 @@
 {{ range $v := .Books -}}
     <tr>
         <td><a href="/book/{{ $v.ID }}">{{ $v.Title }}</a></td>
-        <td>{{ joinNaturally "and" $v.Authors }}</td>
+        <td>{{ noEscapeHTML (joinNaturally "and" (searchFor "author" $v.Authors)) }}</td>
         <td>{{ $v.Series }}</td>
     </tr>
 {{end -}}

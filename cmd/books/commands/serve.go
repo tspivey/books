@@ -8,6 +8,7 @@ package commands
 
 import (
 	"fmt"
+	"html"
 	"html/template"
 	"log"
 	"math"
@@ -67,8 +68,12 @@ func runServer(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	templatesDir := path.Join(cfgDir, "templates")
-	funcMap := template.FuncMap{"joinNaturally": joinNaturally}
-	templates = template.Must(template.New("template").Funcs(funcMap).ParseGlob(path.Join(templatesDir, "*.html")))
+	htmlFuncMap := template.FuncMap{
+		"joinNaturally": joinNaturally,
+		"noEscapeHTML":  func(s string) template.HTML { return template.HTML(s) },
+		"searchFor":     searchFor,
+	}
+	templates = template.Must(template.New("template").Funcs(htmlFuncMap).ParseGlob(path.Join(templatesDir, "*.html")))
 	lib, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening library: %s\n", err)
@@ -303,4 +308,23 @@ func bookConverterWorker(h *libHandler) {
 		}
 		h.convertingMtx.Unlock()
 	}
+}
+
+// searchFor wraps each item in a slice of strings with
+// a link to search for that item in the library.
+// Spaces will be replaced with +.
+// If field is not empty, the search will be limited to that field.
+func searchFor(field string, items []string) []string {
+	if field != "" {
+		field += ":"
+	}
+
+	newItems := make([]string, len(items))
+	for i := range items {
+		newItems[i] = fmt.Sprintf(`<a href="/search/?query=%s%s">%s</a>`,
+			field, html.EscapeString(strings.Replace(items[i], " ", "%2B", -1)),
+			html.EscapeString(items[i]))
+	}
+
+	return newItems
 }
