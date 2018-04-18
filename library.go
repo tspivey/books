@@ -176,6 +176,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		}
 		book.ID, err = res.LastInsertId()
 		if err != nil {
+			tx.Rollback()
 			return errors.Wrap(err, "sett new book ID")
 		}
 		for _, author := range book.Authors {
@@ -223,7 +224,10 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		return errors.Wrap(err, "Moving or copying book")
 	}
 
-	tx.Commit()
+	err = tx.Commit()
+	if err != nil {
+		return errors.Wrap(err, "import book")
+	}
 	log.Printf("Imported book: %s: %s, ID = %d", strings.Join(book.Authors, " & "), book.Title, book.ID)
 
 	return nil
@@ -413,6 +417,7 @@ func (lib *Library) GetBooksByID(ids []int64) ([]Book, error) {
 	query := "select id, series, title from books where id in (" + joinInt64s(ids, ",") + ")"
 	rows, err := tx.Query(query)
 	if err != nil {
+		tx.Rollback()
 		return results, errors.Wrap(err, "fetching books from database by ID")
 	}
 
