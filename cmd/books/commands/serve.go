@@ -48,6 +48,9 @@ func init() {
 	serveCmd.Flags().IntP("conversion-workers", "c", 4, "Number of conversion workers to run")
 	viper.BindPFlag("server.bind", serveCmd.Flags().Lookup("bind"))
 	viper.BindPFlag("server.conversion_workers", serveCmd.Flags().Lookup("conversion-workers"))
+	viper.SetDefault("server.read_timeout", 5)
+	viper.SetDefault("server.write_timeout", 0)
+	viper.SetDefault("server.idle_timeout", 120)
 }
 
 type libHandler struct {
@@ -100,13 +103,14 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	srv := &http.Server{
 		Addr:         viper.GetString("server.bind"),
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  viper.GetDuration("server.read_timeout") * time.Second,
+		WriteTimeout: viper.GetDuration("server.write_timeout") * time.Second,
+		IdleTimeout:  viper.GetDuration("server.idle_timeout") * time.Second,
 		Handler:      handler,
 	}
 
 	log.Printf("Listening on %s", srv.Addr)
+	log.Printf("Read timeout: %d, write timeout: %d, idle timeout: %d seconds", srv.ReadTimeout/time.Second, srv.WriteTimeout/time.Second, srv.IdleTimeout/time.Second)
 	log.Fatal(srv.ListenAndServe())
 }
 
