@@ -5,6 +5,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/kapmahc/epub"
 )
 
 // A MetadataParser is used to parse the metadata for a book from a list of BookFiles.
@@ -71,4 +73,40 @@ func re2map(s string, r *regexp.Regexp) map[string]string {
 	}
 
 	return rmap
+}
+
+type EpubMetadataParser struct{}
+
+func (*EpubMetadataParser) Parse(files []string) (book Book, parsed bool) {
+	for _, file := range files {
+		f, err := epub.Open(file)
+		if err != nil {
+			log.Printf("Error while opening epub %s: %s", file, err)
+			f.Close()
+			continue
+		}
+
+		m := f.Opf.Metadata
+		if len(m.Title) == 0 || m.Title[0] == "" {
+			f.Close()
+			continue
+		}
+		book.Title = m.Title[0]
+
+		book.Authors = make([]string, 0)
+		for _, author := range m.Creator {
+			if author.Data != "" {
+				book.Authors = append(book.Authors, author.Data)
+			}
+		}
+		if len(book.Authors) == 0 {
+			f.Close()
+			continue
+		}
+		f.Close()
+
+		return book, true
+	}
+
+	return
 }
