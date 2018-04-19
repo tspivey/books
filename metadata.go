@@ -79,6 +79,9 @@ type EpubMetadataParser struct{}
 
 func (*EpubMetadataParser) Parse(files []string) (book Book, parsed bool) {
 	for _, file := range files {
+		if path.Ext(strings.ToLower(file)) != ".epub" {
+			continue
+		}
 		f, err := epub.Open(file)
 		if err != nil {
 			log.Printf("Error while opening epub %s: %s", file, err)
