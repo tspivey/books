@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +26,8 @@ var compiled []*regexp.Regexp
 var regexpNames []string
 var outputTmpl *template.Template
 var recursive bool
-var regexpParser books.RegexpMetadataParser
+var metadataParsers []string
+var metadataParserMap map[string]books.MetadataParser
 var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
 // importCmd represents the import command
@@ -48,16 +50,18 @@ or the template override set in the library.`,
 func init() {
 	rootCmd.AddCommand(importCmd)
 
-	importCmd.Flags().StringSliceP("regexp", "r", []string{}, "List of regular expressions to use during import")
+	importCmd.Flags().StringSliceP("metadata-parsers", "p", []string{}, "List of metadata parsers to use during import")
+	importCmd.Flags().StringSliceP("regexp", "r", []string{"regexp"}, "List of regular expressions to use during import")
 	importCmd.Flags().BoolP("move", "m", false, "Move files instead of copying them")
 	importCmd.Flags().BoolVarP(&recursive, "recursive", "R", false, "Recurse into subdirectories")
 	viper.BindPFlag("move", importCmd.Flags().Lookup("move"))
+	viper.BindPFlag("default_metadata_parsers", importCmd.Flags().Lookup("metadata-parsers"))
 	viper.BindPFlag("default_regexps", importCmd.Flags().Lookup("regexp"))
 }
 
 func importFunc(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "No files to import.")
+		fmt.Fprintf(os.Stderr, "No files to import.\n")
 		os.Exit(1)
 	}
 
@@ -83,8 +87,20 @@ func importFunc(cmd *cobra.Command, args []string) {
 		compiled = append(compiled, c)
 	}
 
-	regexpParser = books.RegexpMetadataParser{compiled, regexpNames}
-
+	metadataParserMap = make(map[string]books.MetadataParser)
+	metadataParserMap["regexp"] = &books.RegexpMetadataParser{compiled, regexpNames}
+	metadataParsers = viper.GetStringSlice("default_metadata_parsers")
+	for _, name := range metadataParsers {
+		if _, ok := metadataParserMap[name]; !ok {
+			fmt.Fprintf(os.Stderr, "Metadata parser %s not found.\n", name)
+			os.Exit(1)
+		}
+	}
+	if len(metadataParsers) == 0 {
+		fmt.Fprintf(os.Stderr, "No metadata parsers defined.\n")
+		os.Exit(1)
+	}
+	fmt.Printf("Using metadata parsers: %v\n", metadataParsers)
 	outputTmplSrc := viper.GetString("output_template")
 	var err error
 	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join}).Parse(outputTmplSrc)
@@ -142,10 +158,18 @@ func importBook(filename string, library *books.Library) error {
 
 	tags := splitTags(filename)
 	ext := path.Ext(filename)
-	book, matched := regexpParser.Parse([]string{filename})
-	if !matched {
-		return errors.Errorf("No regular expression matched %s", filename)
+	var book books.Book
+	var matched bool
+	for _, parserName := range metadataParsers {
+		if book, matched = metadataParserMap[parserName].Parse([]string{filename}); matched {
+			log.Printf("Matched metadata parser: %s", parserName)
+			break
+		}
 	}
+	if !matched {
+		return errors.Errorf("No metadata parser matched %s", filename)
+	}
+
 	bf := books.BookFile{Tags: tags, OriginalFilename: filename}
 	bf.FileSize = fi.Size()
 	bf.FileMtime = fi.ModTime()
