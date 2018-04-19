@@ -64,9 +64,8 @@ func showRun(cmd *cobra.Command, args []string) {
 {{ .Extension -}}
 : {{if .Tags}}({{range $i, $v := .Tags -}}
 {{if $i}}, {{end -}}
-{{ $v }}{{end}}){{end -}}
- ({{ .ID }})
-{{ end }}
+{{ $v }}{{end}}){{end }} ({{ .ID }})
+{{ end -}}
 {{ else }}No files available for this book{{ end }}`
 
 	tmpl, err := template.New("book_details").Funcs(funcMap).Parse(bookDetailsTmplSrc)
