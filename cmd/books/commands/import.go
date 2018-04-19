@@ -6,6 +6,7 @@ package commands
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,6 +25,8 @@ var compiled []*regexp.Regexp
 var regexpNames []string
 var outputTmpl *template.Template
 var recursive bool
+var regexpParser books.RegexpMetadataParser
+var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
 // importCmd represents the import command
 var importCmd = &cobra.Command{
@@ -80,6 +83,8 @@ func importFunc(cmd *cobra.Command, args []string) {
 		compiled = append(compiled, c)
 	}
 
+	regexpParser = books.RegexpMetadataParser{compiled, regexpNames}
+
 	outputTmplSrc := viper.GetString("output_template")
 	var err error
 	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join}).Parse(outputTmplSrc)
@@ -129,46 +134,57 @@ func importBooks(root string, recursive bool, library *books.Library) error {
 }
 
 // importBook imports a single book into the library.
-func importBook(path string, library *books.Library) error {
-	var book books.Book
-	var matched bool
-	for i, c := range compiled {
-		if book, matched = books.ParseFilename(path, c); matched {
-			book.Files[0].RegexpName = regexpNames[i]
-			book.Files[0].OriginalFilename = path
-			break
-		}
-	}
-	if !matched {
-		return errors.Errorf("No regular expression matched %s", path)
-	}
-
-	title, tags := books.SplitTitleAndTags(book.Title)
-	book.Title = title
-	book.Files[0].Tags = tags
-
-	fi, err := os.Stat(path)
+func importBook(filename string, library *books.Library) error {
+	fi, err := os.Stat(filename)
 	if err != nil {
 		return errors.Wrap(err, "Get file info for book")
 	}
-	book.Files[0].FileSize = fi.Size()
-	book.Files[0].FileMtime = fi.ModTime()
 
-	err = book.Files[0].CalculateHash()
+	new_filename, tags := splitTags(filename)
+	ext := path.Ext(filename)
+	book, matched := regexpParser.Parse([]string{new_filename})
+	if !matched {
+		return errors.Errorf("No regular expression matched %s", filename)
+	}
+	bf := books.BookFile{Tags: tags, OriginalFilename: filename}
+	bf.FileSize = fi.Size()
+	bf.FileMtime = fi.ModTime()
+	bf.Extension = strings.TrimPrefix(ext, ".")
+
+	err = bf.CalculateHash()
 	if err != nil {
 		return errors.Wrap(err, "Calculate book hash")
 	}
 
-	s, err := book.Files[0].Filename(outputTmpl, &book)
+	s, err := bf.Filename(outputTmpl, &book)
 	if err != nil {
 		return errors.Wrap(err, "Calculate output filename for book")
 	}
-	book.Files[0].CurrentFilename = books.GetUniqueName(s)
-	fmt.Printf("Using regexp name: %s\n", book.Files[0].RegexpName)
+	bf.CurrentFilename = books.GetUniqueName(s)
+	book.Files = append(book.Files, bf)
 
 	if err := library.ImportBook(book, viper.GetBool("move")); err != nil {
 		return errors.Wrap(err, "Import book into library")
 	}
 
 	return nil
+}
+
+// SplitTags takes an unsplit filename in the form "title (tag1) (tag2)..."
+// and returns the filename and tags separately.
+func splitTags(filename string) (string, []string) {
+	// Match tags from the right first,
+	// adding tags in reverse order until the last non 0 length match is the title.
+	ext := path.Ext(filename)
+	filename = strings.TrimSuffix(filename, ext)
+	var tags = []string{}
+	for {
+		match := tagsRegexp.FindStringSubmatch(filename)
+		if len(match) == 0 {
+			break
+		}
+		filename = match[1]
+		tags = append([]string{match[2]}, tags...)
+	}
+	return strings.Trim(filename, " ") + ext, tags
 }

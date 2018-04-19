@@ -40,7 +40,6 @@ filename text not null,
 file_size integer not null,
 file_mtime timestamp not null,
 hash text not null unique,
-regexp_name text not null,
 template_override text,
 source text
 );
@@ -190,9 +189,9 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		book.ID = existingBookID
 	}
 
-	res, err := tx.Exec(`insert into files (book_id, extension, original_filename, filename, file_size, file_mtime, hash, regexp_name, source)
-	values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		book.ID, bf.Extension, bf.OriginalFilename, bf.CurrentFilename, bf.FileSize, bf.FileMtime, bf.Hash, bf.RegexpName, bf.Source)
+	res, err := tx.Exec(`insert into files (book_id, extension, original_filename, filename, file_size, file_mtime, hash, source)
+	values (?, ?, ?, ?, ?, ?, ?, ?)`,
+		book.ID, bf.Extension, bf.OriginalFilename, bf.CurrentFilename, bf.FileSize, bf.FileMtime, bf.Hash, bf.Source)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "Inserting book file into the db")
@@ -584,7 +583,7 @@ func getFilesByID(tx *sql.Tx, ids []int64) ([]BookFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	query := "select id, extension, original_filename, filename, file_size, file_mtime, hash, regexp_name, source from files where id in (" + joinInt64s(ids, ",") + ")"
+	query := "select id, extension, original_filename, filename, file_size, file_mtime, hash, source from files where id in (" + joinInt64s(ids, ",") + ")"
 	rows, err := tx.Query(query)
 	if err != nil {
 		return nil, err
@@ -592,7 +591,7 @@ func getFilesByID(tx *sql.Tx, ids []int64) ([]BookFile, error) {
 	defer rows.Close()
 	for rows.Next() {
 		bf := BookFile{}
-		err := rows.Scan(&bf.ID, &bf.Extension, &bf.OriginalFilename, &bf.CurrentFilename, &bf.FileSize, &bf.FileMtime, &bf.Hash, &bf.RegexpName, &bf.Source)
+		err := rows.Scan(&bf.ID, &bf.Extension, &bf.OriginalFilename, &bf.CurrentFilename, &bf.FileSize, &bf.FileMtime, &bf.Hash, &bf.Source)
 		if err != nil {
 			return nil, err
 		}

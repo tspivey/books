@@ -25,7 +25,6 @@ var Version = "unset"
 
 // Copyright is the copyright including authors of Books.
 var Copyright = "Copyright © 2018 Tyler Spivey <tspivey@pcdesk.net> and Niko Carpenter <nikoacarpenter@gmail.com>"
-var tagsRegexp = regexp.MustCompile(`^(.*)\(([^)]+)\)\s*$`)
 
 // Book represents a book in a library.
 type Book struct {
@@ -46,7 +45,6 @@ type BookFile struct {
 	CurrentFilename  string
 	FileMtime        time.Time
 	FileSize         int64
-	RegexpName       string
 	Source           string
 }
 
@@ -105,44 +103,4 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	bf.Extension = mapping["ext"]
 	result.Files = append(result.Files, bf)
 	return result, true
-}
-
-// SplitTitleAndTags takes an unsplit title in the form "title (tag1) (tag2)..."
-// and returns the title and tags separately.
-func SplitTitleAndTags(s string) (string, []string) {
-	// Match tags from the right first,
-	// adding tags in reverse order until the last non 0 length match is the title.
-	var tags = []string{}
-	for {
-		match := tagsRegexp.FindStringSubmatch(s)
-		if len(match) == 0 {
-			break
-		}
-		s = match[1]
-		tags = append([]string{match[2]}, tags...)
-	}
-	return strings.Trim(s, " "), tags
-}
-
-// re2map returns a map of named groups to their matches.
-// Example:
-//     regexp: ^(?P<first>\w+) (?P<second>\w+)$
-//     string: hello world
-//     result: first => hello, second => world
-func re2map(s string, r *regexp.Regexp) map[string]string {
-	rmap := make(map[string]string)
-	matches := r.FindStringSubmatch(s)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	names := r.SubexpNames()
-	for i, n := range names {
-		if i == 0 {
-			continue
-		}
-		rmap[n] = matches[i]
-	}
-
-	return rmap
 }
