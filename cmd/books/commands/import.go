@@ -140,9 +140,9 @@ func importBook(filename string, library *books.Library) error {
 		return errors.Wrap(err, "Get file info for book")
 	}
 
-	new_filename, tags := splitTags(filename)
+	tags := splitTags(filename)
 	ext := path.Ext(filename)
-	book, matched := regexpParser.Parse([]string{new_filename})
+	book, matched := regexpParser.Parse([]string{filename})
 	if !matched {
 		return errors.Errorf("No regular expression matched %s", filename)
 	}
@@ -170,9 +170,9 @@ func importBook(filename string, library *books.Library) error {
 	return nil
 }
 
-// SplitTags takes an unsplit filename in the form "title (tag1) (tag2)..."
-// and returns the filename and tags separately.
-func splitTags(filename string) (string, []string) {
+// SplitTags takes an unsplit filename in the form "filename (tag1) (tag2)..."
+// and returns the tags.
+func splitTags(filename string) []string {
 	// Match tags from the right first,
 	// adding tags in reverse order until the last non 0 length match is the title.
 	ext := path.Ext(filename)
@@ -186,5 +186,5 @@ func splitTags(filename string) (string, []string) {
 		filename = match[1]
 		tags = append([]string{match[2]}, tags...)
 	}
-	return strings.Trim(filename, " ") + ext, tags
+	return tags
 }
