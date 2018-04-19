@@ -185,7 +185,12 @@ func importBook(filename string, library *books.Library) error {
 	if err != nil {
 		return errors.Wrap(err, "Calculate output filename for book")
 	}
-	bf.CurrentFilename = books.GetUniqueName(s)
+	newFilename := books.GetUniqueName(filepath.Join(booksRoot, s))
+	bf.CurrentFilename, err = filepath.Rel(booksRoot, newFilename)
+	if err != nil {
+		return errors.Wrap(err, "get new book filename")
+	}
+	bf.CurrentFilename = strings.Replace(bf.CurrentFilename, string(filepath.Separator), "/", -1)
 	book.Files = append(book.Files, bf)
 
 	if err := library.ImportBook(book, viper.GetBool("move")); err != nil {
