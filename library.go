@@ -406,24 +406,39 @@ func (lib *Library) GetBooksByID(ids []int64) ([]Book, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-
 	tx, err := lib.Begin()
 	if err != nil {
 		return nil, errors.Wrap(err, "get books by ID")
 	}
+	books, err := getBooksByID(tx, ids)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return nil, errors.Wrap(err, "get books by ID")
+	}
+	return books, nil
+}
+
+// getBooksByID retrieves books from the library by their id.
+func getBooksByID(tx *sql.Tx, ids []int64) ([]Book, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
 	results := []Book{}
 
 	query := "select id, series, title from books where id in (" + joinInt64s(ids, ",") + ")"
 	rows, err := tx.Query(query)
 	if err != nil {
-		tx.Rollback()
 		return results, errors.Wrap(err, "fetching books from database by ID")
 	}
 
 	for rows.Next() {
 		book := Book{}
 		if err := rows.Scan(&book.ID, &book.Series, &book.Title); err != nil {
-			tx.Rollback()
 			return nil, errors.Wrap(err, "scanning rows")
 		}
 
@@ -431,20 +446,17 @@ func (lib *Library) GetBooksByID(ids []int64) ([]Book, error) {
 	}
 
 	if rows.Err() != nil {
-		tx.Rollback()
 		return nil, errors.Wrap(err, "querying books by ID")
 	}
 	rows.Close()
 
 	authorMap, err := getAuthorsByBookIds(tx, ids)
 	if err != nil {
-		tx.Rollback()
 		return nil, errors.Wrap(err, "get authors for books")
 	}
 
 	fileMap, err := getFilesByBookIds(tx, ids)
 	if err != nil {
-		tx.Rollback()
 		return nil, errors.Wrap(err, "get files for books")
 	}
 
@@ -452,10 +464,6 @@ func (lib *Library) GetBooksByID(ids []int64) ([]Book, error) {
 	for i, book := range results {
 		results[i].Authors = authorMap[book.ID]
 		results[i].Files = fileMap[book.ID]
-	}
-	err = tx.Commit()
-	if err != nil {
-		return nil, errors.Wrap(err, "get books by ID")
 	}
 	return results, nil
 }
@@ -616,6 +624,65 @@ func (lib *Library) ConvertToEpub(file BookFile) error {
 	return nil
 }
 
+// UpdateBook updates the authors and title of an existing book in the database, specified by book.ID.
+func (lib *Library) UpdateBook(book Book) error {
+	tx, err := lib.Begin()
+	if err != nil {
+		return errors.Wrap(err, "get transaction")
+	}
+	existingBooks, err := getBooksByID(tx, []int64{book.ID})
+	if err != nil {
+		tx.Rollback()
+		return errors.Wrap(err, "get books by ID")
+	}
+	if len(existingBooks) == 0 {
+		tx.Rollback()
+		return errors.New("book not found")
+	}
+	existingBook := existingBooks[0]
+	if existingBook.Title == book.Title && authorsEqual(existingBook.Authors, book.Authors) {
+		tx.Rollback()
+		log.Printf("Not updating book %d because authors and titles are equal", book.ID)
+		return nil
+	}
+	if book.Title != existingBook.Title {
+		_, err := tx.Exec("update books set updated_on=datetime(), title=? where id=?", book.Title, book.ID)
+		if err != nil {
+			tx.Rollback()
+			return errors.Wrap(err, "update title")
+		}
+	}
+	if !authorsEqual(existingBook.Authors, book.Authors) {
+		_, err := tx.Exec("delete from books_authors where book_id=?", book.ID)
+		if err != nil {
+			tx.Rollback()
+			return errors.Wrap(err, "delete authors")
+		}
+		for _, author := range book.Authors {
+			if err := insertAuthor(tx, author, &book); err != nil {
+				tx.Rollback()
+				return errors.Wrap(err, "insert author")
+			}
+		}
+	}
+	_, err = tx.Exec("update books set updated_on=datetime() where id=?", book.ID)
+	if err != nil {
+		tx.Rollback()
+		return errors.Wrap(err, "update book")
+	}
+	_, err = tx.Exec("update books_fts set title=?, author=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.ID)
+	if err != nil {
+		tx.Rollback()
+		return errors.Wrap(err, "update book")
+	}
+	err = tx.Commit()
+	if err != nil {
+		return errors.Wrap(err, "update book")
+	}
+	log.Printf("Updated book %d with authors: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Title)
+	return nil
+}
+
 // copyFile copies a file from src to dst, setting dst's modified time to that of src.
 func copyFile(src, dst string) (e error) {
 	fp, err := os.Open(src)
@@ -709,19 +776,6 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 		return 0, false, errors.Wrap(err, "get authors for books")
 	}
 
-	authorsEqual := func(a, b []string) bool {
-		if len(a) != len(b) {
-			return false
-		}
-		for i := range a {
-			if a[i] != b[i] {
-				return false
-			}
-		}
-
-		return true
-	}
-
 	for bookID, authorNames := range authorMap {
 		if authorsEqual(authors, authorNames) {
 			return bookID, true, nil
@@ -729,6 +783,18 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	}
 
 	return 0, false, nil
+}
+
+func authorsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // joinInt64s is like strings.Join, but for slices of int64.
