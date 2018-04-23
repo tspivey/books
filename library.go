@@ -233,16 +233,25 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 }
 
 func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
-	if len(book.Files) != 1 {
+	if !createNew && len(book.Files) != 1 {
 		return errors.New("Book to index must contain only one file")
 	}
 	bf := book.Files[0]
 	joinedTags := strings.Join(bf.Tags, " ")
 	if createNew {
 		// Index book for searching.
+		extensions := []string{}
+		tags := []string{}
+		sources := []string{}
+		for _, f := range book.Files {
+			tags = append(tags, f.Tags...)
+			extensions = append(extensions, f.Extension)
+			sources = append(sources, f.Source)
+		}
+
 		_, err := tx.Exec(`insert into books_fts (docid, author, series, title, extension, tags,  source)
 	values (?, ?, ?, ?, ?, ?, ?)`,
-			book.ID, strings.Join(book.Authors, " & "), book.Series, book.Title, bf.Extension, joinedTags, bf.Source)
+			book.ID, strings.Join(book.Authors, " & "), book.Series, book.Title, strings.Join(extensions, " "), strings.Join(tags, " "), strings.Join(sources, " "))
 		if err != nil {
 			return err
 		}
@@ -783,6 +792,54 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	}
 
 	return 0, false, nil
+}
+
+func (lib *Library) MergeBooks(ids []int64) error {
+	tx, err := lib.Begin()
+	if err != nil {
+		return errors.Wrap(err, "create transaction")
+	}
+	if err := mergeBooks(tx, ids); err != nil {
+		tx.Rollback()
+		return errors.Wrap(err, "merge books")
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "commit")
+	}
+	return nil
+}
+
+func mergeBooks(tx *sql.Tx, ids []int64) error {
+	_, err := tx.Exec("update files set updated_on=datetime(), book_id=? where book_id in ("+joinInt64s(ids[1:], ",")+")", ids[0])
+	if err != nil {
+		return errors.Wrap(err, "merge books")
+	}
+	_, err = tx.Exec("update books set updated_on=datetime() where id=?", ids[0])
+	if err != nil {
+		return errors.Wrap(err, "update updated_on for book")
+	}
+	if _, err = tx.Exec("delete from books where id in (" + joinInt64s(ids[1:], ",") + ")"); err != nil {
+		return errors.Wrap(err, "delete book")
+	}
+	if _, err = tx.Exec("delete from books_fts where docid in (" + joinInt64s(ids[1:], ",") + ")"); err != nil {
+		return errors.Wrap(err, "delete from books_fts")
+	}
+	// Reindex the book in search
+	_, err = tx.Exec("delete from books_fts where docid=?", ids[0])
+	if err != nil {
+		return errors.Wrap(err, "delete original book from fts")
+	}
+	books, err := getBooksByID(tx, []int64{ids[0]})
+	if err != nil {
+		return errors.Wrap(err, "get original book")
+	}
+	if len(books) == 0 {
+		return errors.New("Can't find original book to reindex")
+	}
+	if err := indexBookInSearch(tx, &books[0], true); err != nil {
+		return errors.Wrap(err, "index book in search")
+	}
+	return nil
 }
 
 func authorsEqual(a, b []string) bool {
