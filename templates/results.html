@@ -5,18 +5,10 @@
 <h2>Search results for {{ .Query }}</h2>
 <div id="results-display" style="display:inline-block; float:left;width: 80%">
 {{ if .Books -}}
-<table id="results">
-    <tr>
-        <th>Title</th>
-        <th>Author</th>
-        <th>Series</th>
-    </tr>
 {{ range $v := .Books -}}
-    <tr>
-        <td><a href="/book/{{ $v.ID }}">{{ $v.Title }}</a></td>
-        <td>{{ noEscapeHTML (joinNaturally "and" (searchFor "author" $v.Authors)) }}</td>
-        <td>{{ $v.Series }}</td>
-    </tr>
+        <h3><a href="/book/{{ $v.ID }}">{{ $v.Title }}</a>, by {{ noEscapeHTML (joinNaturally "and" (searchFor "author" $v.Authors)) }}</h3>
+        {{ if $v.Series}}<p>Series: {{ $v.Series }}</p>{{ end }}
+    {{ template "book_details_table" $v }}
 {{end -}}
 </table>
 {{ else -}}
