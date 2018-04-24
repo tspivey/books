@@ -41,6 +41,7 @@ var serveCmd = &cobra.Command{
 
 var templates *template.Template
 var cacheDir string
+var itemsPerPage int
 
 func init() {
 	rootCmd.AddCommand(serveCmd)
@@ -52,6 +53,7 @@ func init() {
 	viper.SetDefault("server.read_timeout", 5)
 	viper.SetDefault("server.write_timeout", 0)
 	viper.SetDefault("server.idle_timeout", 120)
+	viper.SetDefault("server.items_per_page", 20)
 }
 
 type libHandler struct {
@@ -92,6 +94,8 @@ func runServer(cmd *cobra.Command, args []string) {
 		go bookConverterWorker(&lh)
 	}
 	log.Printf("Started %d workers for converting books", numConversionWorkers)
+
+	itemsPerPage = viper.GetInt("server.items_per_page")
 
 	r.HandleFunc("/", indexHandler)
 	r.HandleFunc("/book/{id:\\d+}", lh.bookDetailsHandler)
@@ -226,7 +230,7 @@ type errorPage struct {
 }
 
 func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
-	pageNumber, offset, limit := 1, 0, 20
+	pageNumber, offset, limit := 1, 0, itemsPerPage
 	maxPageLinks := 10
 	val, ok := r.URL.Query()["query"]
 	if !ok {
