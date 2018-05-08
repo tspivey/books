@@ -13,6 +13,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -74,6 +75,9 @@ func runServer(cmd *cobra.Command, args []string) {
 		"joinNaturally": joinNaturally,
 		"noEscapeHTML":  func(s string) template.HTML { return template.HTML(s) },
 		"searchFor":     searchFor,
+		"base":          path.Base,
+		"pathEscape":    url.PathEscape,
+		"changeExt":     changeExt,
 	}
 	templates = template.Must(template.New("template").Funcs(htmlFuncMap).ParseGlob(path.Join(templatesDir, "*.html")))
 	lib, err := books.OpenLibrary(libraryFile, booksRoot)
@@ -99,6 +103,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	r.HandleFunc("/", indexHandler)
 	r.HandleFunc("/book/{id:\\d+}", lh.bookDetailsHandler)
+	r.HandleFunc("/download/{id:\\d+}/{name:.+}", lh.downloadHandler)
 	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
 	r.HandleFunc("/search/", lh.searchHandler)
 
@@ -184,12 +189,18 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		n := strings.TrimSuffix(base, path.Ext(base)) + ".epub"
-		w.Header().Set("Content-Disposition", "attachment; filename=\""+n+"\"")
+		if _, nameFound := mux.Vars(r)["name"]; !nameFound {
+			w.Header().Set("Content-Disposition", "attachment; filename=\""+n+"\"")
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
 		http.ServeFile(w, r, epubFn)
 		return
 	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
+	if _, nameFound := mux.Vars(r)["name"]; !nameFound {
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+base+"\"")
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
 	http.ServeFile(w, r, fn)
 }
 
@@ -331,4 +342,9 @@ func searchFor(field string, items []string) []string {
 	}
 
 	return newItems
+}
+
+// changeExt changes the extension of pathname to ext, which should include ..
+func changeExt(pathname string, ext string) string {
+	return strings.TrimSuffix(pathname, path.Ext(pathname)) + ext
 }
