@@ -104,7 +104,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 	fmt.Printf("Using metadata parsers: %v\n", metadataParsers)
 	outputTmplSrc := viper.GetString("output_template")
 	var err error
-	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join}).Parse(outputTmplSrc)
+	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": escape}).Parse(outputTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
 		os.Exit(1)
@@ -217,4 +217,14 @@ func splitTags(filename string) []string {
 		tags = append([]string{match[2]}, tags...)
 	}
 	return tags
+}
+
+func escape(filename string) string {
+	replacements := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|"}
+
+	newFilename := filename
+	for _, r := range replacements {
+		newFilename = strings.Replace(newFilename, r, "_", -1)
+	}
+	return newFilename
 }
