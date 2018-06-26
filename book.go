@@ -49,13 +49,22 @@ type BookFile struct {
 }
 
 // Filename retrieves a book's correct filename, based on the given output template.
-func (b *BookFile) Filename(tmpl *template.Template, book *Book) (string, error) {
+func (bf *BookFile) Filename(tmpl *template.Template, book *Book) (string, error) {
 	var fnBuff bytes.Buffer
 	type FilenameTemplate struct {
 		Book
 		BookFile
+		AuthorsShort string
 	}
-	ft := FilenameTemplate{*book, *b}
+	ft := FilenameTemplate{*book, *bf, "Unknown"}
+	if len(ft.Authors) == 1 {
+		ft.AuthorsShort = ft.Authors[0]
+	} else if len(ft.Authors) == 2 {
+		ft.AuthorsShort = strings.Join(ft.Authors, " & ")
+	} else if len(ft.Authors) > 2 {
+		ft.AuthorsShort = strings.Join(ft.Authors[:2], " & ") + " & Others"
+	}
+
 	if err := tmpl.Execute(&fnBuff, ft); err != nil {
 		return "", errors.Wrap(err, "Retrieve formatted filename for book")
 	}
