@@ -185,6 +185,7 @@ func importBook(filename string, library *books.Library) error {
 	if err != nil {
 		return errors.Wrap(err, "Calculate output filename for book")
 	}
+	s = truncateFilename(s)
 	newFilename := books.GetUniqueName(filepath.Join(booksRoot, s))
 	bf.CurrentFilename, err = filepath.Rel(booksRoot, newFilename)
 	if err != nil {
@@ -227,4 +228,31 @@ func escape(filename string) string {
 		newFilename = strings.Replace(newFilename, r, "_", -1)
 	}
 	return newFilename
+}
+
+func truncateFilename(fn string) string {
+	var lst []string
+	dirs, fn := path.Split(fn)
+	if dirs != "" {
+		dirs = strings.TrimRight(dirs, string(os.PathSeparator))
+		lst = strings.Split(dirs, string(os.PathSeparator))
+	}
+	for i, f := range lst {
+		if len(f) <= 255 {
+			continue
+		}
+
+		l := len(f)
+		if l > 255 {
+			l = 255
+		}
+		lst[i] = f[:l]
+	}
+	if len(fn) > 250 {
+		ext := path.Ext(fn)
+		nameLen := 250 - len(ext)
+		fn = fn[:nameLen] + ext
+	}
+	lst = append(lst, fn)
+	return strings.Join(lst, string(os.PathSeparator))
 }
