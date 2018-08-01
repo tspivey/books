@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"log"
 	"os"
 	"strconv"
 
@@ -68,7 +69,7 @@ func mergeFunc(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	fmt.Printf("Merging all books into %s (%d) by %s.\n", book.Title, book.ID, joinNaturally("and", book.Authors))
+	log.Printf("Merging all books into %s (%d) by %s.\n", book.Title, book.ID, joinNaturally("and", book.Authors))
 	if err := library.MergeBooks(ids); err != nil {
 		fmt.Fprintf(os.Stderr, "Error merging books: %s\n", err)
 		os.Exit(1)

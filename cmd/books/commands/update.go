@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -67,7 +68,7 @@ func updateFunc(cmd *cobra.Command, args []string) {
 		fmt.Printf("Book %s - %s not updated.\n", joinNaturally("and", book.Authors), book.Title)
 		os.Exit(0)
 	}
-	fmt.Printf("Updating book with new metadata: %s - %s\n", joinNaturally("and", newBook.Authors), newBook.Title)
+	log.Printf("Updating book with new metadata: %s - %s\n", joinNaturally("and", newBook.Authors), newBook.Title)
 	newBook.ID = book.ID
 	err = library.UpdateBook(newBook)
 	if err != nil {

@@ -101,7 +101,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "No metadata parsers defined.\n")
 		os.Exit(1)
 	}
-	fmt.Printf("Using metadata parsers: %v\n", metadataParsers)
+	log.Printf("Using metadata parsers: %v\n", metadataParsers)
 	outputTmplSrc := viper.GetString("output_template")
 	var err error
 	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": escape}).Parse(outputTmplSrc)
@@ -118,7 +118,6 @@ func importFunc(cmd *cobra.Command, args []string) {
 	defer library.Close()
 
 	for _, path := range args {
-		fmt.Printf("Importing %s:\n", path)
 		if err := importBooks(path, recursive, library); err != nil {
 			fmt.Fprintf(os.Stderr, "Cannot import books from %s: %s; skipping\n", path, err)
 			continue
@@ -135,9 +134,9 @@ func importBooks(root string, recursive bool, library *books.Library) error {
 		}
 
 		if !info.IsDir() {
-			fmt.Printf("Importing file %s:\n", path)
+			log.Printf("Importing file %s:\n", path)
 			if err := importBook(path, library); err != nil {
-				fmt.Fprintf(os.Stderr, "Cannot import book from %s: %s; skipping\n", path, err)
+				log.Printf("Cannot import book from %s: %s; skipping\n", path, err)
 			}
 			return nil
 		}
