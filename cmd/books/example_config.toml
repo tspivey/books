@@ -2,7 +2,7 @@ default_regexps = ["series", "nonseries"]
 default_metadata_parsers = ["regexp", "epub"]
 output_template = '''{{escape (printf "%.1s" (index .Authors 0) | ToUpper)}}/{{escape .AuthorsShort}}/{{escape .AuthorsShort}} - {{if .Series}}[{{escape .Series}}] - {{end}}{{escape .Title}}{{range .Tags}} ({{escape .}}){{end}}.{{escape .Extension}}'''
 [regexps]
-series = '''^(?P<author>.+?) - \[(?P<series>.+?)\] - (?P<title>.+?) *(\([^)]+\) ?)*\.(?P<ext>.+)$'''
-nonseries = '''^(?P<author>.+?) - (?P<title>.+?) *(\([^)]+\) ?)*\.(?P<ext>.+)$'''
+series = '''^(?P<author>.+?) - \[(?P<series>.+?)\] - (?P<title>.+?) *(\([^)]+\) ?)*\.(?P<ext>[^.]+)$'''
+nonseries = '''^(?P<author>.+?) - (?P<title>.+?) *(\([^)]+\) ?)*\.(?P<ext>[^.]+)$'''
 [server]
-bind = "127.0.0.1:8080"
+bind = "0.0.0.0:8000"
