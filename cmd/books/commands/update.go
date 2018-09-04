@@ -70,7 +70,7 @@ func updateFunc(cmd *cobra.Command, args []string) {
 	}
 	log.Printf("Updating book with new metadata: %s - %s\n", joinNaturally("and", newBook.Authors), newBook.Title)
 	newBook.ID = book.ID
-	err = library.UpdateBook(newBook)
+	err = library.UpdateBook(newBook, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error updating book: %s\n", err)
 		os.Exit(1)

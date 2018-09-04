@@ -20,6 +20,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+type BookExistsError struct {
+	err    string
+	BookID int64
+}
+
+func (bee BookExistsError) Error() string {
+	return bee.err
+}
+
 var initialSchema = `create table books (
 id integer primary key,
 created_on timestamp not null default (datetime()),
@@ -635,7 +644,7 @@ func (lib *Library) ConvertToEpub(file BookFile) error {
 }
 
 // UpdateBook updates the authors and title of an existing book in the database, specified by book.ID.
-func (lib *Library) UpdateBook(book Book) error {
+func (lib *Library) UpdateBook(book Book, updateSeries bool) error {
 	tx, err := lib.Begin()
 	if err != nil {
 		return errors.Wrap(err, "get transaction")
@@ -650,13 +659,29 @@ func (lib *Library) UpdateBook(book Book) error {
 		return errors.New("book not found")
 	}
 	existingBook := existingBooks[0]
-	if existingBook.Title == book.Title && authorsEqual(existingBook.Authors, book.Authors) {
+	if existingBook.Title == book.Title &&
+		authorsEqual(existingBook.Authors, book.Authors) &&
+		(!updateSeries || existingBook.Series == book.Series) {
 		tx.Rollback()
-		log.Printf("Not updating book %d because authors and titles are equal", book.ID)
+		log.Printf("Not updating book %d because nothing changed", book.ID)
 		return nil
 	}
-	if book.Title != existingBook.Title {
-		_, err := tx.Exec("update books set updated_on=datetime(), title=? where id=?", book.Title, book.ID)
+	existingBookID, found, err := getBookIDByTitleAndAuthors(tx, book.Title, book.Authors)
+	if err != nil {
+		return errors.Wrap(err, "find existing book")
+	}
+	if found && book.ID != existingBookID {
+		tx.Rollback()
+		return BookExistsError{"Book already exists", existingBookID}
+	}
+
+	if book.Title != existingBook.Title ||
+		(updateSeries && book.Series != existingBook.Series) {
+		if updateSeries {
+			_, err = tx.Exec("update books set updated_on=datetime(), title=?, series=? where id=?", book.Title, book.Series, book.ID)
+		} else {
+			_, err = tx.Exec("update books set updated_on=datetime(), title=? where id=?", book.Title, book.ID)
+		}
 		if err != nil {
 			tx.Rollback()
 			return errors.Wrap(err, "update title")
@@ -674,11 +699,6 @@ func (lib *Library) UpdateBook(book Book) error {
 				return errors.Wrap(err, "insert author")
 			}
 		}
-	}
-	_, err = tx.Exec("update books set updated_on=datetime() where id=?", book.ID)
-	if err != nil {
-		tx.Rollback()
-		return errors.Wrap(err, "update book")
 	}
 	_, err = tx.Exec("update books_fts set title=?, author=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.ID)
 	if err != nil {
@@ -804,6 +824,7 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	return 0, false, nil
 }
 
+// MergeBooks merges all of the files from ids into the first one.
 func (lib *Library) MergeBooks(ids []int64) error {
 	tx, err := lib.Begin()
 	if err != nil {
