@@ -87,6 +87,7 @@ func init() {
 	sql.Register("sqlite3async",
 		&sqlite3.SQLiteDriver{
 			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+				conn.Exec("pragma foreign_keys=on", []driver.Value{})
 				conn.Exec("pragma synchronous=off", []driver.Value{})
 				return nil
 			},
