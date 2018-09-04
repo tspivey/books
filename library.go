@@ -763,6 +763,15 @@ func GetUniqueName(f string) string {
 	return newName
 }
 
+func (lib *Library) GetBookIDByTitleAndAuthors(title string, authors []string) (int64, bool, error) {
+	tx, err := lib.Begin()
+	if err != nil {
+		return 0, false, errors.Wrap(err, "get transaction")
+	}
+	defer tx.Rollback()
+	return getBookIDByTitleAndAuthors(tx, title, authors)
+}
+
 func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int64, bool, error) {
 	rows, err := tx.Query("SELECT id FROM books WHERE title = ?", title)
 	if err != nil {
