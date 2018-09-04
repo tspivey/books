@@ -74,6 +74,7 @@ func matchFunc(cmd *cobra.Command, args []string) {
 	metadataParserMap = make(map[string]books.MetadataParser)
 	metadataParserMap["regexp"] = &books.RegexpMetadataParser{compiled, regexpNames}
 	metadataParserMap["epub"] = &books.EpubMetadataParser{}
+	metadataParserMap["mobi"] = &books.MobiMetadataParser{}
 	metadataParsers = viper.GetStringSlice("default_metadata_parsers")
 	for _, name := range metadataParsers {
 		if _, ok := metadataParserMap[name]; !ok {
