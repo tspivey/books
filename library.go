@@ -873,6 +873,25 @@ func mergeBooks(tx *sql.Tx, ids []int64) error {
 	return nil
 }
 
+func (lib *Library) GetBookIDByFilename(fn string) (int64, error) {
+	tx, err := lib.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query("Select book_id from files where filename=?", fn)
+	if err != nil {
+		return 0, err
+	}
+	if rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		return id, nil
+	}
+	rows.Close()
+	return 0, errors.New("book not found")
+}
+
 func authorsEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

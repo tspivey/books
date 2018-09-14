@@ -6,7 +6,9 @@ package commands
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -36,6 +38,7 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// editCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	editCmd.Flags().BoolP("file", "f", false, "Edit a file")
 }
 
 func editFunc(cmd *cobra.Command, args []string) {
@@ -43,10 +46,9 @@ func editFunc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: books edit <book id>\n")
 		os.Exit(1)
 	}
-	bookId, err := strconv.Atoi(args[0])
+	useFile, err := cmd.Flags().GetBool("file")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid book ID.")
-		os.Exit(1)
+		log.Fatal(err)
 	}
 	library, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
@@ -54,6 +56,34 @@ func editFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	defer library.Close()
+
+	var bookId int64
+	if useFile {
+		rootPath := booksRoot + string(os.PathSeparator)
+		absPath, err := filepath.Abs(args[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting absolute path: %s\n", err)
+		}
+		var fn string
+		if strings.HasPrefix(absPath, rootPath) {
+			fn = strings.TrimPrefix(absPath, rootPath)
+		} else {
+			fmt.Fprintf(os.Stderr, "Book not found.\n")
+			os.Exit(1)
+		}
+		bookId, err = library.GetBookIDByFilename(fn)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting book: %s\n", err)
+			os.Exit(1)
+		}
+	} else {
+		bookId, err = strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid book ID.\n")
+			os.Exit(1)
+		}
+	}
+
 	books, err := library.GetBooksByID([]int64{int64(bookId)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting books by ID: %s", err)
