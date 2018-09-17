@@ -20,12 +20,6 @@ import (
 	"github.com/pkg/xattr"
 )
 
-// Version is the version of Books.
-var Version = "unset"
-
-// Copyright is the copyright including authors of Books.
-var Copyright = "Copyright © 2018 Tyler Spivey <tspivey@pcdesk.net> and Niko Carpenter <nikoacarpenter@gmail.com>"
-
 // Book represents a book in a library.
 type Book struct {
 	ID      int64
