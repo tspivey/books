@@ -52,7 +52,7 @@ func mkBin() error {
 	if _, err := os.Stat(outDir); err == nil {
 		return nil
 	}
-	return os.Mkdir(outDir, 0744)
+	return os.Mkdir(outDir, 0755)
 }
 
 func getVars() map[string]string {
