@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// BookExistsError is returned by UpdateBook when a book with the given title and authors already exists in the database, and is not the one we're trying to update.
 type BookExistsError struct {
 	err    string
 	BookID int64
@@ -873,6 +874,7 @@ func mergeBooks(tx *sql.Tx, ids []int64) error {
 	return nil
 }
 
+// GetBookIDByFilename returns a book ID given a filename relative to books root.
 func (lib *Library) GetBookIDByFilename(fn string) (int64, error) {
 	tx, err := lib.Begin()
 	if err != nil {
