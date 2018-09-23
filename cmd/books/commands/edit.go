@@ -98,7 +98,9 @@ func editFunc(cmd *cobra.Command, args []string) {
 	line := liner.NewLiner()
 	defer line.Close()
 	line.SetCtrlCAborts(true)
-
+	line.SetCompleter(func(s string) []string {
+		return completer(&book, s)
+	})
 	for {
 		cmd, err := line.Prompt(">")
 		if err != nil {
@@ -188,4 +190,19 @@ func cmdSave(book *books.Book, lib *books.Library, args string) {
 		return
 	}
 
+}
+
+func completer(book *books.Book, s string) []string {
+	lst := strings.SplitN(s, " ", 2)
+	if len(lst) < 1 {
+		return []string{}
+	}
+	if lst[0] == "a" || lst[0] == "authors" {
+		return []string{"authors " + strings.Join(book.Authors, " & ")}
+	} else if lst[0] == "title" {
+		return []string{"title " + book.Title}
+	} else if lst[0] == "series" {
+		return []string{"series " + book.Series}
+	}
+	return []string{}
 }
