@@ -6,6 +6,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -104,10 +105,10 @@ func editFunc(cmd *cobra.Command, args []string) {
 	for {
 		cmd, err := line.Prompt(">")
 		if err != nil {
-			if err == liner.ErrPromptAborted {
+			if err == liner.ErrPromptAborted || err == io.EOF {
 				return
 			}
-			fmt.Fprintf(os.Stderr, "Error reading line: %s", err)
+			fmt.Fprintf(os.Stderr, "Error reading line: %s\n", err)
 			return
 		}
 		parse(&book, library, cmd)
