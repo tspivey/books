@@ -16,6 +16,7 @@ import (
 	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
 	"github.com/tspivey/books"
+	"github.com/tspivey/books/cmd/books/edit"
 )
 
 // editCmd represents the edit command
@@ -95,7 +96,8 @@ func editFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	book := books[0]
-	cmdShow(&book, library, "")
+	parser := edit.NewParser(&book, library)
+	parser.RunCommand("show", "")
 	line := liner.NewLiner()
 	defer line.Close()
 	line.SetCtrlCAborts(true)
@@ -111,21 +113,12 @@ func editFunc(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error reading line: %s\n", err)
 			return
 		}
-		parse(&book, library, cmd)
+		parse(parser, cmd)
 	}
 
 }
 
-var cmdtable = map[string]func(book *books.Book, lib *books.Library, args string){
-	"a":       cmdAuthors,
-	"authors": cmdAuthors,
-	"show":    cmdShow,
-	"title":   cmdTitle,
-	"series":  cmdSeries,
-	"save":    cmdSave,
-}
-
-func parse(b *books.Book, lib *books.Library, cmd string) {
+func parse(parser *edit.Parser, cmd string) {
 	lst := strings.SplitN(cmd, " ", 2)
 	var args string
 	if len(lst) == 1 {
@@ -133,64 +126,12 @@ func parse(b *books.Book, lib *books.Library, cmd string) {
 	} else {
 		args = lst[1]
 	}
-	fn, ok := cmdtable[lst[0]]
+	ok := parser.HasCommand(lst[0])
 	if !ok {
 		fmt.Println("Unknown command.")
 		return
 	}
-	fn(b, lib, args)
-}
-
-func cmdShow(book *books.Book, library *books.Library, args string) {
-	fmt.Println("Title: ", book.Title)
-	fmt.Println("Authors: ", strings.Join(book.Authors, " & "))
-	fmt.Println("Series: ", book.Series)
-}
-
-func cmdAuthors(book *books.Book, lib *books.Library, args string) {
-	if args == "" {
-		fmt.Fprintf(os.Stderr, "Usage: authors <authors>\n")
-		return
-	}
-	newAuthors := strings.Split(args, " & ")
-	book.Authors = newAuthors
-}
-
-func cmdTitle(book *books.Book, lib *books.Library, args string) {
-	if args == "" {
-		fmt.Fprintf(os.Stderr, "Usage: title <title>\n")
-		return
-	}
-	book.Title = args
-}
-
-func cmdSeries(book *books.Book, lib *books.Library, args string) {
-	if args == "" {
-		fmt.Fprintf(os.Stderr, "Usage: series <series>\n")
-		return
-	}
-	book.Series = args
-}
-
-func cmdSave(book *books.Book, lib *books.Library, args string) {
-	err := lib.UpdateBook(*book, true)
-	if bee, ok := err.(books.BookExistsError); ok {
-		if args == "-m" {
-			err := lib.MergeBooks([]int64{bee.BookID, book.ID})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error merging books: %v\n", err)
-				return
-			}
-			fmt.Printf("Merged into %d\n", bee.BookID)
-		} else {
-			fmt.Printf("A duplicate book already exists, id: %d. To merge, type save -m.\n", bee.BookID)
-			return
-		}
-	} else if err != nil {
-		fmt.Fprintf(os.Stderr, "error while updating book: %v\n", err)
-		return
-	}
-
+	parser.RunCommand(lst[0], args)
 }
 
 func completer(book *books.Book, s string) []string {
@@ -198,7 +139,7 @@ func completer(book *books.Book, s string) []string {
 	if len(lst) < 1 {
 		return []string{}
 	}
-	if lst[0] == "a" || lst[0] == "authors" {
+	if lst[0] == "authors" {
 		return []string{"authors " + strings.Join(book.Authors, " & ")}
 	} else if lst[0] == "title" {
 		return []string{"title " + book.Title}
