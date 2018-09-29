@@ -126,12 +126,10 @@ func parse(parser *edit.Parser, cmd string) {
 	} else {
 		args = lst[1]
 	}
-	ok := parser.HasCommand(lst[0])
-	if !ok {
+	if parser.RunCommand(lst[0], args) == edit.ErrUnknownCommand {
 		fmt.Println("Unknown command.")
 		return
 	}
-	parser.RunCommand(lst[0], args)
 }
 
 func completer(book *books.Book, s string) []string {

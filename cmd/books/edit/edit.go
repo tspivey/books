@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/tspivey/books"
 )
+
+var ErrUnknownCommand = errors.New("unknown command")
 
 type DefaultCommand struct {
 	Run    func(cmd *DefaultCommand, args string)
@@ -21,17 +24,13 @@ type Parser struct {
 	commands map[string]*DefaultCommand
 }
 
-func (p *Parser) HasCommand(cmd string) bool {
-	_, ok := p.commands[cmd]
-	return ok
-}
-
-func (p *Parser) RunCommand(cmd string, args string) {
+func (p *Parser) RunCommand(cmd string, args string) error {
 	dc, ok := p.commands[cmd]
 	if !ok {
-		return
+		return ErrUnknownCommand
 	}
 	dc.Run(dc, args)
+	return nil
 }
 
 var authorsCmd = &DefaultCommand{
