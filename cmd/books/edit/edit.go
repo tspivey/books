@@ -10,20 +10,24 @@ import (
 	"github.com/tspivey/books"
 )
 
+// ErrUnknownCommand is returned when a command cannot be found by the given command name.
 var ErrUnknownCommand = errors.New("unknown command")
 
+// DefaultCommand contains fields used by all other edit commands.
 type DefaultCommand struct {
 	Run    func(cmd *DefaultCommand, args string)
 	Help   string
 	parser *Parser
 }
 
+// Parser contains the set of available commands, and the shared state for those commands.
 type Parser struct {
 	book     *books.Book
 	lib      *books.Library
 	commands map[string]*DefaultCommand
 }
 
+// RunCommand runs a command with the given arguments, returning ErrUnknownCommand if not found.
 func (p *Parser) RunCommand(cmd string, args string) error {
 	dc, ok := p.commands[cmd]
 	if !ok {
@@ -116,7 +120,12 @@ func cmdHelp(commandsMap map[string]*DefaultCommand, cmd *DefaultCommand, args s
 
 // NewParser creates a new parser.
 func NewParser(book *books.Book, lib *books.Library) *Parser {
-	parser := &Parser{book: book, lib: lib}
+	parser := &Parser{
+		book: book,
+		lib:  lib,
+	}
+
+	// Return a copy of a DefaultCommand  with a parser added.
 	c := func(cmd *DefaultCommand) *DefaultCommand {
 		return &DefaultCommand{Run: cmd.Run, Help: cmd.Help, parser: parser}
 	}

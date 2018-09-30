@@ -23,9 +23,7 @@ import (
 var editCmd = &cobra.Command{
 	Use:   "edit",
 	Short: "Interactively edits a book",
-	Long: `Interactively edits a book.
-`,
-	Run: editFunc,
+	Run:   editFunc,
 }
 
 func init() {
@@ -40,7 +38,7 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// editCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	editCmd.Flags().BoolP("file", "f", false, "Edit a file")
+	editCmd.Flags().BoolP("file", "f", false, "Specify a book  by one of its filenames")
 }
 
 func editFunc(cmd *cobra.Command, args []string) {
