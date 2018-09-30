@@ -1,3 +1,4 @@
+// Package edit contains sub commands for editing books from the command line.
 package edit
 
 import (
