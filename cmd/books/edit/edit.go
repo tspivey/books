@@ -15,9 +15,10 @@ var ErrUnknownCommand = errors.New("unknown command")
 
 // DefaultCommand contains fields used by all other edit commands.
 type DefaultCommand struct {
-	Run    func(cmd *DefaultCommand, args string)
-	Help   string
-	parser *Parser
+	Run       func(cmd *DefaultCommand, args string)
+	Help      string
+	parser    *Parser
+	completer func(cmd *DefaultCommand, s string) []string
 }
 
 // Parser contains the set of available commands, and the shared state for those commands.
@@ -37,6 +38,29 @@ func (p *Parser) RunCommand(cmd string, args string) error {
 	return nil
 }
 
+// Completer tries to complete a command and its arguments.
+func (p *Parser) Completer(s string) []string {
+	lst := strings.SplitN(s, " ", 2)
+	if len(lst) < 1 {
+		return []string{}
+	}
+	commands := []string{}
+	for k := range p.commands {
+		commands = append(commands, k)
+	}
+	sort.Strings(commands)
+	for _, c := range commands {
+		if p.commands[c].completer == nil {
+			continue
+		}
+		l := p.commands[c].completer(p.commands[c], s)
+		if len(l) > 0 {
+			return l
+		}
+	}
+	return []string{}
+}
+
 var authorsCmd = &DefaultCommand{
 	Help: "Sets the authors of the currently edited book",
 	Run: func(cmd *DefaultCommand, args string) {
@@ -46,6 +70,12 @@ var authorsCmd = &DefaultCommand{
 		}
 		newAuthors := strings.Split(args, " & ")
 		cmd.parser.book.Authors = newAuthors
+	},
+	completer: func(cmd *DefaultCommand, s string) []string {
+		if !strings.HasPrefix("authors", s) {
+			return []string{}
+		}
+		return []string{"authors " + strings.Join(cmd.parser.book.Authors, " & ")}
 	},
 }
 
@@ -58,6 +88,12 @@ var titleCmd = &DefaultCommand{
 		}
 		cmd.parser.book.Title = args
 	},
+	completer: func(cmd *DefaultCommand, s string) []string {
+		if !strings.HasPrefix("title", s) {
+			return []string{}
+		}
+		return []string{"title " + cmd.parser.book.Title}
+	},
 }
 
 var seriesCmd = &DefaultCommand{
@@ -68,6 +104,12 @@ var seriesCmd = &DefaultCommand{
 			return
 		}
 		cmd.parser.book.Series = args
+	},
+	completer: func(cmd *DefaultCommand, s string) []string {
+		if !strings.HasPrefix("series", s) {
+			return []string{}
+		}
+		return []string{"series " + cmd.parser.book.Series}
 	},
 }
 
@@ -125,9 +167,14 @@ func NewParser(book *books.Book, lib *books.Library) *Parser {
 		lib:  lib,
 	}
 
-	// Return a copy of a DefaultCommand  with a parser added.
+	// Return a copy of a DefaultCommand  with a parser and completer added.
 	c := func(cmd *DefaultCommand) *DefaultCommand {
-		return &DefaultCommand{Run: cmd.Run, Help: cmd.Help, parser: parser}
+		return &DefaultCommand{
+			Run:       cmd.Run,
+			Help:      cmd.Help,
+			parser:    parser,
+			completer: cmd.completer,
+		}
 	}
 	m := make(map[string]*DefaultCommand)
 	m["authors"] = c(authorsCmd)

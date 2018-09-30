@@ -100,9 +100,7 @@ func editFunc(cmd *cobra.Command, args []string) {
 	line := liner.NewLiner()
 	defer line.Close()
 	line.SetCtrlCAborts(true)
-	line.SetCompleter(func(s string) []string {
-		return completer(&book, s)
-	})
+	line.SetCompleter(parser.Completer)
 	for {
 		cmd, err := line.Prompt(">")
 		if err != nil {
@@ -118,30 +116,16 @@ func editFunc(cmd *cobra.Command, args []string) {
 }
 
 func parse(parser *edit.Parser, cmd string) {
+	if strings.TrimSpace(cmd) == "" {
+		return
+	}
 	lst := strings.SplitN(cmd, " ", 2)
 	var args string
-	if len(lst) == 1 {
-		args = ""
-	} else {
+	if len(lst) > 1 {
 		args = lst[1]
 	}
 	if parser.RunCommand(lst[0], args) == edit.ErrUnknownCommand {
 		fmt.Println("Unknown command.")
 		return
 	}
-}
-
-func completer(book *books.Book, s string) []string {
-	lst := strings.SplitN(s, " ", 2)
-	if len(lst) < 1 {
-		return []string{}
-	}
-	if lst[0] == "authors" {
-		return []string{"authors " + strings.Join(book.Authors, " & ")}
-	} else if lst[0] == "title" {
-		return []string{"title " + book.Title}
-	} else if lst[0] == "series" {
-		return []string{"series " + book.Series}
-	}
-	return []string{}
 }
