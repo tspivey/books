@@ -57,7 +57,7 @@ func editFunc(cmd *cobra.Command, args []string) {
 	}
 	defer library.Close()
 
-	var bookId int64
+	var bookID int64
 	if useFile {
 		rootPath := booksRoot + string(os.PathSeparator)
 		absPath, err := filepath.Abs(args[0])
@@ -72,20 +72,20 @@ func editFunc(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Book not found.\n")
 			os.Exit(1)
 		}
-		bookId, err = library.GetBookIDByFilename(fn)
+		bookID, err = library.GetBookIDByFilename(fn)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting book: %s\n", err)
 			os.Exit(1)
 		}
 	} else {
-		bookId, err = strconv.ParseInt(args[0], 10, 64)
+		bookID, err = strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid book ID.\n")
 			os.Exit(1)
 		}
 	}
 
-	books, err := library.GetBooksByID([]int64{int64(bookId)})
+	books, err := library.GetBooksByID([]int64{int64(bookID)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting books by ID: %s", err)
 		os.Exit(1)
