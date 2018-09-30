@@ -63,6 +63,7 @@ func editFunc(cmd *cobra.Command, args []string) {
 		absPath, err := filepath.Abs(args[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting absolute path: %s\n", err)
+			os.Exit(1)
 		}
 		var fn string
 		if strings.HasPrefix(absPath, rootPath) {
