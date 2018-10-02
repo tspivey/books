@@ -824,10 +824,6 @@ func mergeBooks(tx *sql.Tx, ids []int64) error {
 	if err != nil {
 		return errors.Wrap(err, "merge books")
 	}
-	_, err = tx.Exec("update books set updated_on=datetime() where id=?", ids[0])
-	if err != nil {
-		return errors.Wrap(err, "update updated_on for book")
-	}
 	if _, err = tx.Exec("delete from books where id in (" + joinInt64s(ids[1:], ",") + ")"); err != nil {
 		return errors.Wrap(err, "delete book")
 	}
