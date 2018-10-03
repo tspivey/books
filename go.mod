@@ -12,6 +12,7 @@ require (
 	github.com/magefile/mage v1.5.0
 	github.com/mattn/go-sqlite3 v1.9.0
 	github.com/mitchellh/go-homedir v1.0.0
+	github.com/peterh/liner v1.1.0
 	github.com/pkg/errors v0.8.0
 	github.com/pkg/xattr v0.3.1
 	github.com/pmezard/go-difflib v1.0.0 // indirect
