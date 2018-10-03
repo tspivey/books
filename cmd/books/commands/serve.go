@@ -23,9 +23,9 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/tspivey/books"
+	"github.com/tspivey/books/server"
 
 	"strings"
-	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
@@ -58,10 +58,8 @@ func init() {
 }
 
 type libHandler struct {
-	lib           *books.Library
-	convertingMtx sync.Mutex
-	converting    map[int64]error // Holds book conversion status
-	fileCh        chan *books.BookFile
+	lib       *books.Library
+	converter server.BookConverter
 }
 
 func runServer(cmd *cobra.Command, args []string) {
@@ -87,15 +85,10 @@ func runServer(cmd *cobra.Command, args []string) {
 	}
 
 	r := mux.NewRouter()
-	lh := libHandler{
-		lib:        lib,
-		fileCh:     make(chan *books.BookFile),
-		converting: make(map[int64]error),
-	}
-
 	numConversionWorkers := viper.GetInt("server.conversion_workers")
-	for i := 0; i < numConversionWorkers; i++ {
-		go bookConverterWorker(&lh)
+	lh := libHandler{
+		lib:       lib,
+		converter: server.NewCalibreBookConverter(booksRoot, cacheDir, numConversionWorkers),
 	}
 	log.Printf("Started %d workers for converting books", numConversionWorkers)
 
@@ -158,33 +151,19 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var epubFn string
 	if val, ok := r.URL.Query()["format"]; ok && val[0] == "epub" {
-		epubFn = path.Join(cacheDir, file.Hash+".epub")
-		if _, err := os.Stat(epubFn); os.IsNotExist(err) {
-			h.convertingMtx.Lock()
-			err, converting := h.converting[file.ID]
-			h.convertingMtx.Unlock()
-			if !converting {
-				select {
-				case h.fileCh <- &file:
-					w.Header().Set("Refresh", "15")
-					render("converting", w, file)
-				default:
-					render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
-				}
-				return
-			}
-			if err != nil {
-				render("error_page", w, errorPage{"Conversion error", "That file couldn't be converted."})
-				log.Printf("File %d couldn't be converted: %s", file.ID, err)
-				h.convertingMtx.Lock()
-				delete(h.converting, file.ID)
-				h.convertingMtx.Unlock()
-				return
-			}
+		epubFn, err := h.converter.Convert(file)
+		if err == server.ErrBookNotReady {
 			w.Header().Set("Refresh", "15")
 			render("converting", w, file)
+			return
+		}
+		if err == server.ErrQueueFull {
+			render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
+			return
+		}
+		if err != nil {
+			render("error_page", w, errorPage{"Conversion error", "That file couldn't be converted."})
 			return
 		}
 
@@ -302,26 +281,6 @@ func render(name string, w http.ResponseWriter, data interface{}) {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Error")
 		return
-	}
-}
-
-// bookConverterWorker listens on h.booksCh for books to convert to epub.
-func bookConverterWorker(h *libHandler) {
-	for book := range h.fileCh {
-		// ok is true for _, ok := map[key] even for nil values.
-		// Add a nil error to signal that a conversion is taking place.
-		h.convertingMtx.Lock()
-		h.converting[book.ID] = nil
-		h.convertingMtx.Unlock()
-
-		err := h.lib.ConvertToEpub(*book)
-		h.convertingMtx.Lock()
-		if err != nil {
-			h.converting[book.ID] = err
-		} else {
-			delete(h.converting, book.ID)
-		}
-		h.convertingMtx.Unlock()
 	}
 }
 
