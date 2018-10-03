@@ -41,8 +41,8 @@ func (p *Parser) RunCommand(cmd string, args string) error {
 
 // Completer tries to complete a command and its arguments.
 func (p *Parser) Completer(s string) []string {
-	lst := strings.SplitN(s, " ", 2)
-	if len(lst) < 1 {
+	s = strings.TrimSpace(s)
+	if s == "" {
 		return []string{}
 	}
 	commands := []string{}
