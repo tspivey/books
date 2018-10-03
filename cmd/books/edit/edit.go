@@ -153,24 +153,23 @@ var showCmd = &DefaultCommand{
 
 var helpCmd = &DefaultCommand{
 	Help: "Gets help",
-}
-
-var quitCmd = &DefaultCommand{
-	Help: "quits the editor without saving",
-	RunE: func(cmd *DefaultCommand, args string) error {
-		return io.EOF
+	Run: func(cmd *DefaultCommand, args string) {
+		commands := []string{}
+		for k := range cmd.parser.commands {
+			commands = append(commands, k)
+		}
+		sort.Strings(commands)
+		for _, c := range commands {
+			fmt.Println(c + " " + cmd.parser.commands[c].Help)
+		}
 	},
 }
 
-func cmdHelp(commandsMap map[string]*DefaultCommand, cmd *DefaultCommand, args string) {
-	commands := []string{}
-	for k := range commandsMap {
-		commands = append(commands, k)
-	}
-	sort.Strings(commands)
-	for _, c := range commands {
-		fmt.Println(c + " " + commandsMap[c].Help)
-	}
+var quitCmd = &DefaultCommand{
+	Help: "Quits the editor without saving",
+	RunE: func(cmd *DefaultCommand, args string) error {
+		return io.EOF
+	},
 }
 
 // NewParser creates a new parser.
@@ -197,9 +196,6 @@ func NewParser(book *books.Book, lib *books.Library) *Parser {
 	m["save"] = c(saveCmd)
 	m["show"] = c(showCmd)
 	m["help"] = c(helpCmd)
-	m["help"].Run = func(cmd *DefaultCommand, args string) {
-		cmdHelp(m, cmd, args)
-	}
 	m["quit"] = c(quitCmd)
 	parser.commands = m
 	return parser
