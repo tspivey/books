@@ -140,6 +140,12 @@ var saveCmd = &DefaultCommand{
 			return
 		}
 	},
+	completer: func(cmd *DefaultCommand, s string) []string {
+		if !strings.HasPrefix("save", s) {
+			return []string{}
+		}
+		return []string{"save "}
+	},
 }
 
 var showCmd = &DefaultCommand{
@@ -148,6 +154,12 @@ var showCmd = &DefaultCommand{
 		fmt.Println("Title: ", cmd.parser.book.Title)
 		fmt.Println("Authors: ", strings.Join(cmd.parser.book.Authors, " & "))
 		fmt.Println("Series: ", cmd.parser.book.Series)
+	},
+	completer: func(cmd *DefaultCommand, s string) []string {
+		if !strings.HasPrefix("show", s) {
+			return []string{}
+		}
+		return []string{"show "}
 	},
 }
 
@@ -163,12 +175,24 @@ var helpCmd = &DefaultCommand{
 			fmt.Println(c + " " + cmd.parser.commands[c].Help)
 		}
 	},
+	completer: func(cmd *DefaultCommand, s string) []string {
+		if !strings.HasPrefix("help", s) {
+			return []string{}
+		}
+		return []string{"help "}
+	},
 }
 
 var quitCmd = &DefaultCommand{
 	Help: "Quits the editor without saving",
 	RunE: func(cmd *DefaultCommand, args string) error {
 		return io.EOF
+	},
+	completer: func(cmd *DefaultCommand, s string) []string {
+		if !strings.HasPrefix("quit", s) {
+			return []string{}
+		}
+		return []string{"quit "}
 	},
 }
 
