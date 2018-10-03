@@ -40,7 +40,6 @@ var serveCmd = &cobra.Command{
 	Run:   runServer,
 }
 
-var templates *template.Template
 var cacheDir string
 var itemsPerPage int
 
@@ -57,9 +56,10 @@ func init() {
 	viper.SetDefault("server.items_per_page", 20)
 }
 
-type libHandler struct {
+type Server struct {
 	lib       *books.Library
 	converter server.BookConverter
+	templates *template.Template
 }
 
 func runServer(cmd *cobra.Command, args []string) {
@@ -69,15 +69,6 @@ func runServer(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	templatesDir := path.Join(cfgDir, "templates")
-	htmlFuncMap := template.FuncMap{
-		"joinNaturally": joinNaturally,
-		"noEscapeHTML":  func(s string) template.HTML { return template.HTML(s) },
-		"searchFor":     searchFor,
-		"base":          path.Base,
-		"pathEscape":    url.PathEscape,
-		"changeExt":     changeExt,
-	}
-	templates = template.Must(template.New("template").Funcs(htmlFuncMap).ParseGlob(path.Join(templatesDir, "*.html")))
 	lib, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening library: %s\n", err)
@@ -86,19 +77,17 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	r := mux.NewRouter()
 	numConversionWorkers := viper.GetInt("server.conversion_workers")
-	lh := libHandler{
-		lib:       lib,
-		converter: server.NewCalibreBookConverter(booksRoot, cacheDir, numConversionWorkers),
-	}
+	converter := server.NewCalibreBookConverter(booksRoot, cacheDir, numConversionWorkers)
+	srv := New(lib, templatesDir, converter)
 	log.Printf("Started %d workers for converting books", numConversionWorkers)
 
 	itemsPerPage = viper.GetInt("server.items_per_page")
 
-	r.HandleFunc("/", indexHandler)
-	r.HandleFunc("/book/{id:\\d+}", lh.bookDetailsHandler)
-	r.HandleFunc("/download/{id:\\d+}/{name:.+}", lh.downloadHandler)
-	r.HandleFunc("/download/{id:\\d+}", lh.downloadHandler)
-	r.HandleFunc("/search/", lh.searchHandler)
+	r.HandleFunc("/", srv.indexHandler)
+	r.HandleFunc("/book/{id:\\d+}", srv.bookDetailsHandler)
+	r.HandleFunc("/download/{id:\\d+}/{name:.+}", srv.downloadHandler)
+	r.HandleFunc("/download/{id:\\d+}", srv.downloadHandler)
+	r.HandleFunc("/search/", srv.searchHandler)
 
 	secProvider := auth.HtpasswdFileProvider(htpasswdFile)
 	authHandler := auth.NewBasicAuthenticator("Basic Realm", secProvider)
@@ -108,7 +97,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		log.Printf("Using htpasswd file: %s\n", htpasswdFile)
 	}
 
-	srv := &http.Server{
+	hsrv := &http.Server{
 		Addr:         viper.GetString("server.bind"),
 		ReadTimeout:  viper.GetDuration("server.read_timeout") * time.Second,
 		WriteTimeout: viper.GetDuration("server.write_timeout") * time.Second,
@@ -116,29 +105,29 @@ func runServer(cmd *cobra.Command, args []string) {
 		Handler:      handler,
 	}
 
-	log.Printf("Listening on %s", srv.Addr)
-	log.Printf("Read timeout: %d, write timeout: %d, idle timeout: %d seconds", srv.ReadTimeout/time.Second, srv.WriteTimeout/time.Second, srv.IdleTimeout/time.Second)
-	log.Fatal(srv.ListenAndServe())
+	log.Printf("Listening on %s", hsrv.Addr)
+	log.Printf("Read timeout: %d, write timeout: %d, idle timeout: %d seconds", hsrv.ReadTimeout/time.Second, hsrv.WriteTimeout/time.Second, hsrv.IdleTimeout/time.Second)
+	log.Fatal(hsrv.ListenAndServe())
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	render("index", w, nil)
+func (srv *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
+	srv.render("index", w, nil)
 }
 
-func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
+func (srv *Server) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	fileID := mux.Vars(r)["id"]
 	id, err := strconv.Atoi(fileID)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	files, err := h.lib.GetFilesByID([]int64{int64(id)})
+	files, err := srv.lib.GetFilesByID([]int64{int64(id)})
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	if len(files) == 0 {
-		render("error_page", w, errorPage{"File not found", "That file doesn't exist in the library."})
+		srv.render("error_page", w, errorPage{"File not found", "That file doesn't exist in the library."})
 		return
 	}
 	file := files[0]
@@ -147,23 +136,23 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	base := path.Base(fn)
 	if _, err := os.Stat(fn); os.IsNotExist(err) {
 		log.Printf("File %d is in the library but the file is missing: %s", file.ID, fn)
-		render("error_page", w, errorPage{"Cannot download file", "It looks like that file is in the library, but the file is missing."})
+		srv.render("error_page", w, errorPage{"Cannot download file", "It looks like that file is in the library, but the file is missing."})
 		return
 	}
 
 	if val, ok := r.URL.Query()["format"]; ok && val[0] == "epub" {
-		epubFn, err := h.converter.Convert(file)
+		epubFn, err := srv.converter.Convert(file)
 		if err == server.ErrBookNotReady {
 			w.Header().Set("Refresh", "15")
-			render("converting", w, file)
+			srv.render("converting", w, file)
 			return
 		}
 		if err == server.ErrQueueFull {
-			render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
+			srv.render("error_page", w, errorPage{"Conversion error", "The conversion queue is full. Try again later."})
 			return
 		}
 		if err != nil {
-			render("error_page", w, errorPage{"Conversion error", "That file couldn't be converted."})
+			srv.render("error_page", w, errorPage{"Conversion error", "That file couldn't be converted."})
 			return
 		}
 
@@ -183,26 +172,26 @@ func (h *libHandler) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, fn)
 }
 
-func (h *libHandler) bookDetailsHandler(w http.ResponseWriter, r *http.Request) {
+func (srv *Server) bookDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	bookID := mux.Vars(r)["id"]
 	id, err := strconv.Atoi(bookID)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	books, err := h.lib.GetBooksByID([]int64{int64(id)})
+	books, err := srv.lib.GetBooksByID([]int64{int64(id)})
 	if err != nil {
 		log.Printf("Error getting books by ID: %s", err)
 		http.NotFound(w, r)
 		return
 	}
 	if len(books) == 0 {
-		render("error_page", w, errorPage{"Book not found", "That book doesn't exist in the library."})
+		srv.render("error_page", w, errorPage{"Book not found", "That book doesn't exist in the library."})
 		return
 	}
 	book := books[0]
 
-	render("book_details", w, book)
+	srv.render("book_details", w, book)
 }
 
 type results struct {
@@ -219,7 +208,7 @@ type errorPage struct {
 	Long  string
 }
 
-func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
+func (srv *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 	pageNumber, offset, limit := 1, 0, itemsPerPage
 	maxPageLinks := 10
 	val, ok := r.URL.Query()["query"]
@@ -234,10 +223,10 @@ func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	books, moreResults, err := h.lib.SearchPaged(val[0], offset, limit, limit*(maxPageLinks-1))
+	books, moreResults, err := srv.lib.SearchPaged(val[0], offset, limit, limit*(maxPageLinks-1))
 	if err != nil {
 		log.Printf("Error searching for %s: %s", val[0], err)
-		render("error_page", w, errorPage{"Error while searching", "An error occurred while searching."})
+		srv.render("error_page", w, errorPage{"Error while searching", "An error occurred while searching."})
 		return
 	}
 
@@ -270,12 +259,12 @@ func (h *libHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
 		PageLinks:  pageLinks,
 		Query:      val[0],
 	}
-	render("results", w, res)
+	srv.render("results", w, res)
 }
 
 // render renders the template specified by name to w, and sets dot (.) to data.
-func render(name string, w http.ResponseWriter, data interface{}) {
-	err := templates.ExecuteTemplate(w, name, data)
+func (srv *Server) render(name string, w http.ResponseWriter, data interface{}) {
+	err := srv.templates.ExecuteTemplate(w, name, data)
 	if err != nil {
 		log.Println(errors.Wrap(err, "rendering template"))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -306,4 +295,20 @@ func searchFor(field string, items []string) []string {
 // changeExt changes the extension of pathname to ext, which should include ..
 func changeExt(pathname string, ext string) string {
 	return strings.TrimSuffix(pathname, path.Ext(pathname)) + ext
+}
+
+func New(lib *books.Library, templatesDir string, converter server.BookConverter) *Server {
+	htmlFuncMap := template.FuncMap{
+		"joinNaturally": joinNaturally,
+		"noEscapeHTML":  func(s string) template.HTML { return template.HTML(s) },
+		"searchFor":     searchFor,
+		"base":          path.Base,
+		"pathEscape":    url.PathEscape,
+		"changeExt":     changeExt,
+	}
+	return &Server{
+		lib:       lib,
+		templates: template.Must(template.New("template").Funcs(htmlFuncMap).ParseGlob(path.Join(templatesDir, "*.html"))),
+		converter: converter,
+	}
 }
