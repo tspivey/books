@@ -110,22 +110,31 @@ func editFunc(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error reading line: %s\n", err)
 			return
 		}
-		parse(parser, cmd)
+		if err := parse(parser, cmd); err != nil {
+			if err == io.EOF {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "Error running command: %s\n", err)
+			return
+		}
 	}
 
 }
 
-func parse(parser *edit.Parser, cmd string) {
+func parse(parser *edit.Parser, cmd string) error {
 	if strings.TrimSpace(cmd) == "" {
-		return
+		return nil
 	}
 	lst := strings.SplitN(cmd, " ", 2)
 	var args string
 	if len(lst) > 1 {
 		args = lst[1]
 	}
-	if parser.RunCommand(lst[0], args) == edit.ErrUnknownCommand {
+	err := parser.RunCommand(lst[0], args)
+	if err == edit.ErrUnknownCommand {
 		fmt.Println("Unknown command.")
-		return
+		return nil
 	}
+
+	return err
 }

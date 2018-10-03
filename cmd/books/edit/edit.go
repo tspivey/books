@@ -4,6 +4,7 @@ package edit
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -17,6 +18,7 @@ var ErrUnknownCommand = errors.New("unknown command")
 // DefaultCommand contains fields used by all other edit commands.
 type DefaultCommand struct {
 	Run       func(cmd *DefaultCommand, args string)
+	RunE      func(cmd *DefaultCommand, args string) error
 	Help      string
 	parser    *Parser
 	completer func(cmd *DefaultCommand, s string) []string
@@ -34,6 +36,9 @@ func (p *Parser) RunCommand(cmd string, args string) error {
 	dc, ok := p.commands[cmd]
 	if !ok {
 		return ErrUnknownCommand
+	}
+	if dc.RunE != nil {
+		return dc.RunE(dc, args)
 	}
 	dc.Run(dc, args)
 	return nil
@@ -150,6 +155,13 @@ var helpCmd = &DefaultCommand{
 	Help: "Gets help",
 }
 
+var quitCmd = &DefaultCommand{
+	Help: "quits the editor without saving",
+	RunE: func(cmd *DefaultCommand, args string) error {
+		return io.EOF
+	},
+}
+
 func cmdHelp(commandsMap map[string]*DefaultCommand, cmd *DefaultCommand, args string) {
 	commands := []string{}
 	for k := range commandsMap {
@@ -172,6 +184,7 @@ func NewParser(book *books.Book, lib *books.Library) *Parser {
 	c := func(cmd *DefaultCommand) *DefaultCommand {
 		return &DefaultCommand{
 			Run:       cmd.Run,
+			RunE:      cmd.RunE,
 			Help:      cmd.Help,
 			parser:    parser,
 			completer: cmd.completer,
@@ -187,6 +200,7 @@ func NewParser(book *books.Book, lib *books.Library) *Parser {
 	m["help"].Run = func(cmd *DefaultCommand, args string) {
 		cmdHelp(m, cmd, args)
 	}
+	m["quit"] = c(quitCmd)
 	parser.commands = m
 	return parser
 }
