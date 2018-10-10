@@ -27,9 +27,8 @@ type calibreBookConverter struct {
 	closed        bool
 }
 
-var ErrBookNotReady = errors.New("book not ready")
-var ErrQueueFull = errors.New("queue full")
-var ErrConversionFailed = errors.New("conversion failed")
+var errBookNotReady = errors.New("book not ready")
+var errQueueFull = errors.New("queue full")
 
 func (c *calibreBookConverter) Convert(bf books.BookFile) (string, error) {
 	if c.closed {
@@ -49,7 +48,7 @@ func (c *calibreBookConverter) Convert(bf books.BookFile) (string, error) {
 	conversionErr, converting := c.converting[bf.ID]
 	c.convertingMtx.Unlock()
 	if converting {
-		if conversionErr != ErrBookNotReady {
+		if conversionErr != errBookNotReady {
 			c.convertingMtx.Lock()
 			delete(c.converting, bf.ID)
 			c.convertingMtx.Unlock()
@@ -60,9 +59,9 @@ func (c *calibreBookConverter) Convert(bf books.BookFile) (string, error) {
 
 	select {
 	case c.fileCh <- bf:
-		return "", ErrBookNotReady
+		return "", errBookNotReady
 	default:
-		return "", ErrQueueFull
+		return "", errQueueFull
 	}
 }
 
@@ -75,7 +74,7 @@ func (c *calibreBookConverter) Close() {
 func (c *calibreBookConverter) work() {
 	for bookFile := range c.fileCh {
 		c.convertingMtx.Lock()
-		c.converting[bookFile.ID] = ErrBookNotReady
+		c.converting[bookFile.ID] = errBookNotReady
 		c.convertingMtx.Unlock()
 
 		filename := path.Join(c.booksRoot, bookFile.CurrentFilename)
@@ -93,6 +92,7 @@ func (c *calibreBookConverter) work() {
 	}
 }
 
+// NewCalibreBookConverter creates a new BookConverter which uses calibre.
 func NewCalibreBookConverter(booksRoot, cacheDir string, numWorkers int) BookConverter {
 	converter := &calibreBookConverter{
 		fileCh:     make(chan books.BookFile),

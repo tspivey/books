@@ -75,10 +75,10 @@ func updateFunc(cmd *cobra.Command, args []string) {
 	}
 	newBook, parsed := parser.Parse(files)
 	if !parsed {
-		fmt.Printf("Book %s - %s not updated.\n", joinNaturally("and", book.Authors), book.Title)
+		fmt.Printf("Book %s - %s not updated.\n", books.JoinNaturally("and", book.Authors), book.Title)
 		os.Exit(0)
 	}
-	log.Printf("Updating book with new metadata: %s - %s\n", joinNaturally("and", newBook.Authors), newBook.Title)
+	log.Printf("Updating book with new metadata: %s - %s\n", books.JoinNaturally("and", newBook.Authors), newBook.Title)
 	newBook.ID = book.ID
 	err = library.UpdateBook(newBook, outputTmpl, false)
 	if err != nil {
