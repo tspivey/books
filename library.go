@@ -7,14 +7,13 @@ package books
 import (
 	"database/sql"
 	"database/sql/driver"
-	"io"
 	"log"
-	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
+	"text/template"
 
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
@@ -144,7 +143,7 @@ func CreateLibrary(filename string) error {
 // ImportBook adds a book to a library.
 // The file referred to by book.OriginalFilename will either be copied or moved to the location referred to by book.CurrentFilename, relative to the configured books root.
 // The book will not be imported if another book already in the library has the same hash.
-func (lib *Library) ImportBook(book Book, move bool) error {
+func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) error {
 	if len(book.Files) != 1 {
 		return errors.New("Book to import must contain only one file")
 	}
@@ -213,7 +212,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		tx.Rollback()
 		return errors.Wrap(err, "Fetching new book ID")
 	}
-	bf.ID = id
+	book.Files[0].ID = id
 
 	for _, tag := range bf.Tags {
 		if err := insertTag(tx, tag, &bf); err != nil {
@@ -228,7 +227,7 @@ func (lib *Library) ImportBook(book Book, move bool) error {
 		return errors.Wrap(err, "index book in search")
 	}
 
-	err = lib.moveOrCopyFile(book, move)
+	err = lib.updateFilenames(tx, book, tmpl, move)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "Moving or copying book")
@@ -343,32 +342,6 @@ func insertTag(tx *sql.Tx, tag string, bf *BookFile) error {
 	if _, err := tx.Exec("insert or ignore into files_tags (file_id, tag_id) values(?, ?)", bf.ID, tagID); err != nil {
 		return err
 	}
-	return nil
-}
-
-// moveOrCopyFile moves or copies a file from book.OriginalFilename to book.CurrentFilename, relative to the configured books root.
-// All necessary directories to make the destination valid will be created.
-func (lib *Library) moveOrCopyFile(book Book, move bool) error {
-	if len(book.Files) != 1 {
-		return errors.New("Book to move or copy must contain only one file")
-	}
-	bf := book.Files[0]
-	newName := bf.CurrentFilename
-	newPath := path.Join(lib.booksRoot, newName)
-	err := os.MkdirAll(path.Dir(newPath), 0755)
-	if err != nil {
-		return err
-	}
-
-	if move {
-		err = moveFile(bf.OriginalFilename, newPath)
-	} else {
-		err = copyFile(bf.OriginalFilename, newPath)
-	}
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -645,7 +618,7 @@ func (lib *Library) ConvertToEpub(file BookFile) error {
 }
 
 // UpdateBook updates the authors and title of an existing book in the database, specified by book.ID.
-func (lib *Library) UpdateBook(book Book, updateSeries bool) error {
+func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries bool) error {
 	tx, err := lib.Begin()
 	if err != nil {
 		return errors.Wrap(err, "get transaction")
@@ -706,82 +679,16 @@ func (lib *Library) UpdateBook(book Book, updateSeries bool) error {
 		tx.Rollback()
 		return errors.Wrap(err, "update book")
 	}
+	err = lib.updateFilenames(tx, book, tmpl, true)
+	if err != nil {
+		log.Printf("Error updating filenames: %s", err)
+	}
 	err = tx.Commit()
 	if err != nil {
 		return errors.Wrap(err, "update book")
 	}
 	log.Printf("Updated book %d with authors: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Title)
 	return nil
-}
-
-// copyFile copies a file from src to dst, setting dst's modified time to that of src.
-func copyFile(src, dst string) (e error) {
-	fp, err := os.Open(src)
-	if err != nil {
-		return errors.Wrap(err, "Copy file")
-	}
-	defer fp.Close()
-
-	st, err := fp.Stat()
-	if err != nil {
-		return errors.Wrap(err, "Copy file")
-	}
-
-	fd, err := os.Create(dst)
-	if err != nil {
-		return errors.Wrap(err, "Copy file")
-	}
-	defer func() {
-		if err := fd.Close(); err != nil {
-			e = errors.Wrap(err, "Copy file")
-		}
-		_ = os.Chtimes(dst, time.Now(), st.ModTime())
-	}()
-
-	if _, err := io.Copy(fd, fp); err != nil {
-		return errors.Wrap(err, "Copy file")
-	}
-
-	log.Printf("Copied %s to %s", src, dst)
-
-	return nil
-}
-
-// moveFile moves a file from src to dst.
-// First, moveFile will attempt to rename the file,
-// and if that fails, it will perform a copy and delete.
-func moveFile(src, dst string) error {
-	if err := os.Rename(src, dst); err != nil {
-		err = copyFile(src, dst)
-		if err != nil {
-			return err
-		}
-		err = os.Remove(src)
-		if err != nil {
-			log.Printf("Error removing %s: %s", src, err)
-			return nil
-		}
-
-		log.Printf("Moved %s to %s (copy/delete)", src, dst)
-		return nil
-	}
-
-	log.Printf("Moved %s to %s", src, dst)
-	return nil
-}
-
-// GetUniqueName checks to see if a file named f already exists, and if so, finds a unique name.
-func GetUniqueName(f string) string {
-	i := 1
-	ext := path.Ext(f)
-	newName := f
-	_, err := os.Stat(newName)
-	for err == nil {
-		newName = strings.TrimSuffix(f, ext) + " (" + strconv.Itoa(i) + ")" + ext
-		i++
-		_, err = os.Stat(newName)
-	}
-	return newName
 }
 
 func (lib *Library) GetBookIDByTitleAndAuthors(title string, authors []string) (int64, bool, error) {
@@ -888,6 +795,37 @@ func (lib *Library) GetBookIDByFilename(fn string) (int64, error) {
 	}
 	rows.Close()
 	return 0, errors.New("book not found")
+}
+
+func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Template, move bool) error {
+	for _, bf := range book.Files {
+		if bf.ID == 0 {
+			return errors.New("ID cannot be 0")
+		}
+		newFn, err := bf.Filename(tmpl, &book)
+		if err != nil {
+			return errors.Wrap(err, "get new filename")
+		}
+		newFn = TruncateFilename(newFn)
+		if bf.CurrentFilename == newFn {
+			continue
+		}
+		newPath := GetUniqueName(filepath.Join(lib.booksRoot, newFn))
+		var cf string
+		if filepath.IsAbs(bf.CurrentFilename) {
+			// Importing this book
+			cf = bf.CurrentFilename
+		} else {
+			cf = filepath.Join(lib.booksRoot, bf.CurrentFilename)
+		}
+		if err := moveOrCopyFile(cf, newPath, move); err != nil {
+			return errors.Wrap(err, "move or copy file")
+		}
+		if _, err := tx.Exec("update files set updated_on=datetime(), filename=? where id=?", newPath, bf.ID); err != nil {
+			return errors.Wrap(err, "updating file")
+		}
+	}
+	return nil
 }
 
 func authorsEqual(a, b []string) bool {

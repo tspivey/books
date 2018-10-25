@@ -9,12 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"text/template"
 
 	"fmt"
 
 	"github.com/tspivey/books"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // updateCmd represents the update command
@@ -57,6 +60,13 @@ func updateFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	outputTmplSrc := viper.GetString("output_template")
+	outputTmpl, err := template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": books.Escape}).Parse(outputTmplSrc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
+		os.Exit(1)
+	}
+
 	book := bks[0]
 	parser := &books.EpubMetadataParser{}
 	files := []string{}
@@ -70,7 +80,7 @@ func updateFunc(cmd *cobra.Command, args []string) {
 	}
 	log.Printf("Updating book with new metadata: %s - %s\n", joinNaturally("and", newBook.Authors), newBook.Title)
 	newBook.ID = book.ID
-	err = library.UpdateBook(newBook, false)
+	err = library.UpdateBook(newBook, outputTmpl, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error updating book: %s\n", err)
 		os.Exit(1)

@@ -107,3 +107,13 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	result.Files = append(result.Files, bf)
 	return result, true
 }
+
+func Escape(filename string) string {
+	replacements := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|"}
+
+	newFilename := filename
+	for _, r := range replacements {
+		newFilename = strings.Replace(newFilename, r, "_", -1)
+	}
+	return newFilename
+}
