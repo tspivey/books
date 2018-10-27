@@ -147,7 +147,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 	if len(book.Files) != 1 {
 		return errors.New("Book to import must contain only one file")
 	}
-	bf := book.Files[0]
+	bf := &book.Files[0]
 	tx, err := lib.Begin()
 	if err != nil {
 		return err
@@ -215,7 +215,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 	book.Files[0].ID = id
 
 	for _, tag := range bf.Tags {
-		if err := insertTag(tx, tag, &bf); err != nil {
+		if err := insertTag(tx, tag, bf); err != nil {
 			tx.Rollback()
 			return errors.Wrapf(err, "inserting tag %s", tag)
 		}
