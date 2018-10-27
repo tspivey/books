@@ -733,12 +733,12 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 }
 
 // MergeBooks merges all of the files from ids into the first one.
-func (lib *Library) MergeBooks(ids []int64) error {
+func (lib *Library) MergeBooks(ids []int64, tmpl *template.Template) error {
 	tx, err := lib.Begin()
 	if err != nil {
 		return errors.Wrap(err, "create transaction")
 	}
-	if err := mergeBooks(tx, ids); err != nil {
+	if err := lib.mergeBooks(tx, ids, tmpl); err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "merge books")
 	}
@@ -748,7 +748,7 @@ func (lib *Library) MergeBooks(ids []int64) error {
 	return nil
 }
 
-func mergeBooks(tx *sql.Tx, ids []int64) error {
+func (lib *Library) mergeBooks(tx *sql.Tx, ids []int64, tmpl *template.Template) error {
 	_, err := tx.Exec("update files set updated_on=datetime(), book_id=? where book_id in ("+joinInt64s(ids[1:], ",")+")", ids[0])
 	if err != nil {
 		return errors.Wrap(err, "merge books")
@@ -773,6 +773,9 @@ func mergeBooks(tx *sql.Tx, ids []int64) error {
 	}
 	if err := indexBookInSearch(tx, &books[0], true); err != nil {
 		return errors.Wrap(err, "index book in search")
+	}
+	if err := lib.updateFilenames(tx, books[0], tmpl, true); err != nil {
+		return errors.Wrap(err, "update filenames")
 	}
 	return nil
 }

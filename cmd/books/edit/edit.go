@@ -127,7 +127,7 @@ var saveCmd = &DefaultCommand{
 		err := cmd.parser.lib.UpdateBook(*cmd.parser.book, cmd.parser.OutputTemplate, true)
 		if bee, ok := err.(books.BookExistsError); ok {
 			if args == "-m" {
-				err := cmd.parser.lib.MergeBooks([]int64{bee.BookID, cmd.parser.book.ID})
+				err := cmd.parser.lib.MergeBooks([]int64{bee.BookID, cmd.parser.book.ID}, cmd.parser.OutputTemplate)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error merging books: %v\n", err)
 					return

@@ -8,12 +8,15 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
+	"text/template"
 
 	"fmt"
 
 	"github.com/tspivey/books"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // mergeCmd represents the merge command
@@ -61,6 +64,13 @@ func mergeFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	outputTmplSrc := viper.GetString("output_template")
+	outputTmpl, err := template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": books.Escape}).Parse(outputTmplSrc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
+		os.Exit(1)
+	}
+
 	var book books.Book
 	for i := range bks {
 		if bks[i].ID == ids[0] {
@@ -70,7 +80,7 @@ func mergeFunc(cmd *cobra.Command, args []string) {
 	}
 
 	log.Printf("Merging all books into %s (%d) by %s.\n", book.Title, book.ID, joinNaturally("and", book.Authors))
-	if err := library.MergeBooks(ids); err != nil {
+	if err := library.MergeBooks(ids, outputTmpl); err != nil {
 		fmt.Fprintf(os.Stderr, "Error merging books: %s\n", err)
 		os.Exit(1)
 	}
