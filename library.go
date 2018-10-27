@@ -811,6 +811,10 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 			continue
 		}
 		newPath := GetUniqueName(filepath.Join(lib.booksRoot, newFn))
+		relPath, err := filepath.Rel(lib.booksRoot, newPath)
+		if err != nil {
+			return errors.Wrap(err, "get relative path")
+		}
 		var cf string
 		if filepath.IsAbs(bf.CurrentFilename) {
 			// Importing this book
@@ -821,7 +825,7 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 		if err := moveOrCopyFile(cf, newPath, move); err != nil {
 			return errors.Wrap(err, "move or copy file")
 		}
-		if _, err := tx.Exec("update files set updated_on=datetime(), filename=? where id=?", newPath, bf.ID); err != nil {
+		if _, err := tx.Exec("update files set updated_on=datetime(), filename=? where id=?", relPath, bf.ID); err != nil {
 			return errors.Wrap(err, "updating file")
 		}
 	}
