@@ -1,17 +1,19 @@
 package books
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"path"
-	"strconv"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
+// TruncateFilename truncates fn to 255 characters.
 func TruncateFilename(fn string) string {
 	var lst []string
 	dirs, fn := path.Split(fn)
@@ -36,15 +38,15 @@ func TruncateFilename(fn string) string {
 		fn = fn[:nameLen] + ext
 	}
 	lst = append(lst, fn)
-	return strings.Join(lst, string(os.PathSeparator))
+	return filepath.Join(lst...)
 }
 
-// moveOrCopyFile moves or copies a file from book.OriginalFilename to book.CurrentFilename, relative to the configured books root.
+// moveOrCopyFile moves or copies a file from origName to newName.
 // All necessary directories to make the destination valid will be created.
 func moveOrCopyFile(origName, newName string, move bool) error {
 	err := os.MkdirAll(path.Dir(newName), 0755)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "create destination directory")
 	}
 
 	if move {
@@ -52,11 +54,7 @@ func moveOrCopyFile(origName, newName string, move bool) error {
 	} else {
 		err = copyFile(origName, newName)
 	}
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // copyFile copies a file from src to dst, setting dst's modified time to that of src.
@@ -74,13 +72,15 @@ func copyFile(src, dst string) (e error) {
 
 	fd, err := os.Create(dst)
 	if err != nil {
-		return errors.Wrap(err, "Copy file")
+		return errors.Wrap(err, "create destination file")
 	}
 	defer func() {
 		if err := fd.Close(); err != nil {
-			e = errors.Wrap(err, "Copy file")
+			e = errors.Wrap(err, "close destination file")
 		}
-		_ = os.Chtimes(dst, time.Now(), st.ModTime())
+		if err := os.Chtimes(dst, time.Now(), st.ModTime()); err != nil {
+			log.Printf("Error updating times of %s: %s", dst, err)
+		}
 	}()
 
 	if _, err := io.Copy(fd, fp); err != nil {
@@ -116,15 +116,18 @@ func moveFile(src, dst string) error {
 }
 
 // GetUniqueName checks to see if a file named f already exists, and if so, finds a unique name.
-func GetUniqueName(f string) string {
+func GetUniqueName(f string) (string, error) {
 	i := 1
 	ext := path.Ext(f)
 	newName := f
 	_, err := os.Stat(newName)
 	for err == nil {
-		newName = strings.TrimSuffix(f, ext) + " (" + strconv.Itoa(i) + ")" + ext
+		newName = fmt.Sprintf("%s (%d)%s", strings.TrimSuffix(f, ext), i, ext)
 		i++
 		_, err = os.Stat(newName)
 	}
-	return newName
+	if !os.IsNotExist(err) {
+		return newName, err
+	}
+	return newName, nil
 }

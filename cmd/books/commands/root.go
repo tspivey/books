@@ -16,6 +16,7 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tspivey/books"
 )
 
 var cfgDir string
@@ -28,6 +29,9 @@ var funcMap = template.FuncMap{
 		return i + 1
 	},
 	"joinNaturally": joinNaturally,
+	"ToUpper":       strings.ToUpper,
+	"join":          strings.Join,
+	"escape":        books.Escape,
 }
 
 // rootCmd represents the base command when called without any subcommands

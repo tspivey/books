@@ -98,7 +98,7 @@ func editFunc(cmd *cobra.Command, args []string) {
 	}
 	book := foundBooks[0]
 	outputTmplSrc := viper.GetString("output_template")
-	outputTmpl, err := template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": books.Escape}).Parse(outputTmplSrc)
+	outputTmpl, err := template.New("filename").Funcs(funcMap).Parse(outputTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
 		os.Exit(1)

@@ -108,6 +108,7 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	return result, true
 }
 
+// Escape replaces special characters in a filename with _.
 func Escape(filename string) string {
 	replacements := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|"}
 

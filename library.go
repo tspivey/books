@@ -691,6 +691,7 @@ func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries 
 	return nil
 }
 
+// GetBookIDByTitleAndAuthors gets an existing book ID with the given title and authors.
 func (lib *Library) GetBookIDByTitleAndAuthors(title string, authors []string) (int64, bool, error) {
 	tx, err := lib.Begin()
 	if err != nil {
@@ -813,7 +814,10 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 		if bf.CurrentFilename == newFn {
 			continue
 		}
-		newPath := GetUniqueName(filepath.Join(lib.booksRoot, newFn))
+		newPath, err := GetUniqueName(filepath.Join(lib.booksRoot, newFn))
+		if err != nil {
+			return errors.Wrap(err, "get unique name")
+		}
 		relPath, err := filepath.Rel(lib.booksRoot, newPath)
 		if err != nil {
 			return errors.Wrap(err, "get relative path")
