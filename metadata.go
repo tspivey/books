@@ -28,6 +28,7 @@ type RegexpMetadataParser struct {
 	RegexpNames []string
 }
 
+// Parse parses a list of files using regexps.
 func (p *RegexpMetadataParser) Parse(files []string) (book Book, parsed bool) {
 	if len(p.Regexps) != len(p.RegexpNames) {
 		log.Printf("RegexpMetadataParser: lengths of regexps and names are not equal")
@@ -75,8 +76,10 @@ func re2map(s string, r *regexp.Regexp) map[string]string {
 	return rmap
 }
 
+// EpubMetadataParser parses files using EPUB metadata.
 type EpubMetadataParser struct{}
 
+// Parse parses a list of files using EPUB metadata.
 func (*EpubMetadataParser) Parse(files []string) (book Book, parsed bool) {
 	for _, file := range files {
 		if path.Ext(strings.ToLower(file)) != ".epub" {

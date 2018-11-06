@@ -56,7 +56,7 @@ func updateFunc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error getting books by ID: %s\n", err)
 		os.Exit(1)
 	} else if len(bks) == 0 {
-		fmt.Fprintln(os.Stderr, "Book not found.\n")
+		fmt.Fprintln(os.Stderr, "Book not found.")
 		os.Exit(1)
 	}
 

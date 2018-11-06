@@ -88,7 +88,10 @@ func importFunc(cmd *cobra.Command, args []string) {
 	}
 
 	metadataParserMap = make(map[string]books.MetadataParser)
-	metadataParserMap["regexp"] = &books.RegexpMetadataParser{compiled, regexpNames}
+	metadataParserMap["regexp"] = &books.RegexpMetadataParser{
+		Regexps:     compiled,
+		RegexpNames: regexpNames,
+	}
 	metadataParserMap["epub"] = &books.EpubMetadataParser{}
 	metadataParsers = viper.GetStringSlice("default_metadata_parsers")
 	for _, name := range metadataParsers {

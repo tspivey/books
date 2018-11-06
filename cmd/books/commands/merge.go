@@ -59,7 +59,7 @@ func mergeFunc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error getting books by ID: %s\n", err)
 		os.Exit(1)
 	} else if len(bks) != len(ids) {
-		fmt.Fprintln(os.Stderr, "All specified book IDs must exist.\n")
+		fmt.Fprintln(os.Stderr, "All specified book IDs must exist.")
 		os.Exit(1)
 	}
 
