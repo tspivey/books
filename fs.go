@@ -13,7 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TruncateFilename truncates fn to 255 characters.
+// TruncateFilename truncates each path segment to 255 bytes.
+// The filename portion before the extension is truncated to 250 bytes to leave room for getUniqueFilename.
 func TruncateFilename(fn string) string {
 	var lst []string
 	dirs, fn := path.Split(fn)
@@ -26,12 +27,9 @@ func TruncateFilename(fn string) string {
 			continue
 		}
 
-		l := len(f)
-		if l > 255 {
-			l = 255
-		}
-		lst[i] = f[:l]
+		lst[i] = f[:255]
 	}
+
 	if len(fn) > 250 {
 		ext := path.Ext(fn)
 		nameLen := 250 - len(ext)
@@ -50,11 +48,9 @@ func moveOrCopyFile(origName, newName string, move bool) error {
 	}
 
 	if move {
-		err = moveFile(origName, newName)
-	} else {
-		err = copyFile(origName, newName)
+		return moveFile(origName, newName)
 	}
-	return err
+	return copyFile(origName, newName)
 }
 
 // copyFile copies a file from src to dst, setting dst's modified time to that of src.
