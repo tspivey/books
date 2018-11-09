@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"text/template"
 
 	"github.com/tspivey/books"
 )
@@ -26,9 +27,10 @@ type DefaultCommand struct {
 
 // Parser contains the set of available commands, and the shared state for those commands.
 type Parser struct {
-	book     *books.Book
-	lib      *books.Library
-	commands map[string]*DefaultCommand
+	book           *books.Book
+	lib            *books.Library
+	OutputTemplate *template.Template
+	commands       map[string]*DefaultCommand
 }
 
 // RunCommand runs a command with the given arguments, returning ErrUnknownCommand if not found.
@@ -122,10 +124,10 @@ var seriesCmd = &DefaultCommand{
 var saveCmd = &DefaultCommand{
 	Help: "Saves the currently edited book",
 	Run: func(cmd *DefaultCommand, args string) {
-		err := cmd.parser.lib.UpdateBook(*cmd.parser.book, true)
+		err := cmd.parser.lib.UpdateBook(*cmd.parser.book, cmd.parser.OutputTemplate, true)
 		if bee, ok := err.(books.BookExistsError); ok {
 			if args == "-m" {
-				err := cmd.parser.lib.MergeBooks([]int64{bee.BookID, cmd.parser.book.ID})
+				err := cmd.parser.lib.MergeBooks([]int64{bee.BookID, cmd.parser.book.ID}, cmd.parser.OutputTemplate)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error merging books: %v\n", err)
 					return
@@ -197,10 +199,11 @@ var quitCmd = &DefaultCommand{
 }
 
 // NewParser creates a new parser.
-func NewParser(book *books.Book, lib *books.Library) *Parser {
+func NewParser(book *books.Book, lib *books.Library, tmpl *template.Template) *Parser {
 	parser := &Parser{
-		book: book,
-		lib:  lib,
+		book:           book,
+		lib:            lib,
+		OutputTemplate: tmpl,
 	}
 
 	// Return a copy of a DefaultCommand  with a parser and completer added.

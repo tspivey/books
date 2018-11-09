@@ -88,7 +88,10 @@ func importFunc(cmd *cobra.Command, args []string) {
 	}
 
 	metadataParserMap = make(map[string]books.MetadataParser)
-	metadataParserMap["regexp"] = &books.RegexpMetadataParser{compiled, regexpNames}
+	metadataParserMap["regexp"] = &books.RegexpMetadataParser{
+		Regexps:     compiled,
+		RegexpNames: regexpNames,
+	}
 	metadataParserMap["epub"] = &books.EpubMetadataParser{}
 	metadataParsers = viper.GetStringSlice("default_metadata_parsers")
 	for _, name := range metadataParsers {
@@ -104,7 +107,7 @@ func importFunc(cmd *cobra.Command, args []string) {
 	log.Printf("Using metadata parsers: %v\n", metadataParsers)
 	outputTmplSrc := viper.GetString("output_template")
 	var err error
-	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": escape}).Parse(outputTmplSrc)
+	outputTmpl, err = template.New("filename").Funcs(funcMap).Parse(outputTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
 		os.Exit(1)
@@ -180,20 +183,14 @@ func importBook(filename string, library *books.Library) error {
 		return errors.Wrap(err, "Calculate book hash")
 	}
 
-	s, err := bf.Filename(outputTmpl, &book)
+	// CurrentFilename needs to be set so updateFilenames can copy/move the original file
+	bf.CurrentFilename, err = filepath.Abs(bf.OriginalFilename)
 	if err != nil {
-		return errors.Wrap(err, "Calculate output filename for book")
+		return errors.Wrap(err, "get absolute path")
 	}
-	s = truncateFilename(s)
-	newFilename := books.GetUniqueName(filepath.Join(booksRoot, s))
-	bf.CurrentFilename, err = filepath.Rel(booksRoot, newFilename)
-	if err != nil {
-		return errors.Wrap(err, "get new book filename")
-	}
-	bf.CurrentFilename = strings.Replace(bf.CurrentFilename, string(filepath.Separator), "/", -1)
 	book.Files = append(book.Files, bf)
 
-	if err := library.ImportBook(book, viper.GetBool("move")); err != nil {
+	if err := library.ImportBook(book, outputTmpl, viper.GetBool("move")); err != nil {
 		return errors.Wrap(err, "Import book into library")
 	}
 
@@ -217,41 +214,4 @@ func splitTags(filename string) []string {
 		tags = append([]string{match[2]}, tags...)
 	}
 	return tags
-}
-
-func escape(filename string) string {
-	replacements := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|"}
-
-	newFilename := filename
-	for _, r := range replacements {
-		newFilename = strings.Replace(newFilename, r, "_", -1)
-	}
-	return newFilename
-}
-
-func truncateFilename(fn string) string {
-	var lst []string
-	dirs, fn := path.Split(fn)
-	if dirs != "" {
-		dirs = strings.TrimRight(dirs, string(os.PathSeparator))
-		lst = strings.Split(dirs, string(os.PathSeparator))
-	}
-	for i, f := range lst {
-		if len(f) <= 255 {
-			continue
-		}
-
-		l := len(f)
-		if l > 255 {
-			l = 255
-		}
-		lst[i] = f[:l]
-	}
-	if len(fn) > 250 {
-		ext := path.Ext(fn)
-		nameLen := 250 - len(ext)
-		fn = fn[:nameLen] + ext
-	}
-	lst = append(lst, fn)
-	return strings.Join(lst, string(os.PathSeparator))
 }

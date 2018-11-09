@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tspivey/books"
 	"github.com/tspivey/books/cmd/books/edit"
 )
@@ -85,17 +87,23 @@ func editFunc(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	books, err := library.GetBooksByID([]int64{int64(bookID)})
+	foundBooks, err := library.GetBooksByID([]int64{int64(bookID)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting books by ID: %s", err)
 		os.Exit(1)
 	}
-	if len(books) == 0 {
+	if len(foundBooks) == 0 {
 		fmt.Fprintf(os.Stderr, "Book not found.\n")
 		os.Exit(1)
 	}
-	book := books[0]
-	parser := edit.NewParser(&book, library)
+	book := foundBooks[0]
+	outputTmplSrc := viper.GetString("output_template")
+	outputTmpl, err := template.New("filename").Funcs(funcMap).Parse(outputTmplSrc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
+		os.Exit(1)
+	}
+	parser := edit.NewParser(&book, library, outputTmpl)
 	parser.RunCommand("show", "")
 	line := liner.NewLiner()
 	defer line.Close()

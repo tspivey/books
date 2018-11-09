@@ -67,12 +67,12 @@ func (bf *BookFile) Filename(tmpl *template.Template, book *Book) (string, error
 
 // CalculateHash calculates the hash of b.OriginalFilename and updates book.Hash.
 // If a value is stored in the user.hash xattr, that value will be used instead of hashing the file's contents.
-func (b *BookFile) CalculateHash() error {
-	if data, err := xattr.Get(b.OriginalFilename, "user.hash"); err == nil {
-		b.Hash = string(data)
+func (bf *BookFile) CalculateHash() error {
+	if data, err := xattr.Get(bf.OriginalFilename, "user.hash"); err == nil {
+		bf.Hash = string(data)
 		return nil
 	}
-	fp, err := os.Open(b.OriginalFilename)
+	fp, err := os.Open(bf.OriginalFilename)
 	if err != nil {
 		return errors.Wrap(err, "Calculate hash")
 	}
@@ -84,7 +84,7 @@ func (b *BookFile) CalculateHash() error {
 		return errors.Wrap(err, "Calculate hash")
 	}
 	hash := fmt.Sprintf("%x", hasher.Sum(nil))
-	b.Hash = hash
+	bf.Hash = hash
 	return nil
 }
 
@@ -106,4 +106,15 @@ func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
 	bf.Extension = mapping["ext"]
 	result.Files = append(result.Files, bf)
 	return result, true
+}
+
+// Escape replaces special characters in a filename with _.
+func Escape(filename string) string {
+	replacements := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|"}
+
+	newFilename := filename
+	for _, r := range replacements {
+		newFilename = strings.Replace(newFilename, r, "_", -1)
+	}
+	return newFilename
 }

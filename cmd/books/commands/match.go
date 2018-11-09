@@ -72,7 +72,10 @@ func matchFunc(cmd *cobra.Command, args []string) {
 	}
 
 	metadataParserMap = make(map[string]books.MetadataParser)
-	metadataParserMap["regexp"] = &books.RegexpMetadataParser{compiled, regexpNames}
+	metadataParserMap["regexp"] = &books.RegexpMetadataParser{
+		Regexps:     compiled,
+		RegexpNames: regexpNames,
+	}
 	metadataParserMap["epub"] = &books.EpubMetadataParser{}
 	metadataParsers = viper.GetStringSlice("default_metadata_parsers")
 	for _, name := range metadataParsers {
@@ -88,7 +91,7 @@ func matchFunc(cmd *cobra.Command, args []string) {
 	fmt.Fprintf(os.Stderr, "Using metadata parsers: %v\n", metadataParsers)
 	outputTmplSrc := viper.GetString("output_template")
 	var err error
-	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": escape}).Parse(outputTmplSrc)
+	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": books.Escape}).Parse(outputTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
 		os.Exit(1)
@@ -162,8 +165,11 @@ func searchDupe(filename string, library *books.Library) error {
 	if err != nil {
 		return errors.Wrap(err, "Calculate output filename for book")
 	}
-	s = truncateFilename(s)
-	newFilename := books.GetUniqueName(filepath.Join(booksRoot, s))
+	s = books.TruncateFilename(s)
+	newFilename, err := books.GetUniqueName(filepath.Join(booksRoot, s))
+	if err != nil {
+		return errors.Wrap(err, "get unique filename")
+	}
 	bf.CurrentFilename, err = filepath.Rel(booksRoot, newFilename)
 	if err != nil {
 		return errors.Wrap(err, "get new book filename")
