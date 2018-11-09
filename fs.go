@@ -14,7 +14,8 @@ import (
 )
 
 // TruncateFilename truncates each path segment to 255 bytes.
-// The filename portion before the extension is truncated to 250 bytes to leave room for getUniqueFilename.
+// The filename portion is truncated to 250 bytes to leave room for getUniqueFilename,
+// and bytes are removed just before the extension.
 func TruncateFilename(fn string) string {
 	var lst []string
 	dirs, fn := path.Split(fn)
