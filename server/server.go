@@ -41,7 +41,7 @@ type Config struct {
 // New creates a new server.
 func New(cfg *Config) *Server {
 	htmlFuncMap := template.FuncMap{
-		"joinNaturally": joinNaturally,
+		"joinNaturally": books.JoinNaturally,
 		"noEscapeHTML":  func(s string) template.HTML { return template.HTML(s) },
 		"searchFor":     searchFor,
 		"base":          path.Base,
@@ -89,26 +89,6 @@ func (srv *Server) render(name string, w http.ResponseWriter, data interface{}) 
 		fmt.Fprintf(w, "Error")
 		return
 	}
-}
-
-// joinNaturally joins a slice of strings separated by a comma and space,
-// putting the conjunction before the last item.
-// If there are only two items, they will be separated by the conjunction (surrounded by spaces), with no comma.
-// Examples:
-// first item
-// first item and second item
-// first item, second item, and third item
-func joinNaturally(conjunction string, items []string) string {
-	if len(items) == 0 {
-		return ""
-	}
-	if len(items) == 1 {
-		return items[0]
-	}
-	if len(items) == 2 {
-		return fmt.Sprintf("%s %s %s", items[0], conjunction, items[1])
-	}
-	return fmt.Sprintf("%s, %s %s", strings.Join(items[:len(items)-1], ", "), conjunction, items[len(items)-1])
 }
 
 // searchFor wraps each item in a slice of strings with
