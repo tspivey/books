@@ -196,7 +196,25 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		}
 
 	} else {
-		book.ID = existingBookID
+		existingBooksList, err := getBooksByID(tx, []int64{existingBookID})
+		if err != nil {
+			return errors.Wrap(err, "get existing book")
+		}
+		existingBook := existingBooksList[0]
+		if existingBook.Series == "" && book.Series != "" {
+			existingBook.Series = book.Series
+			err = lib.updateBook(tx, existingBook, tmpl, true)
+			if err != nil {
+				return errors.Wrap(err, "update book")
+			}
+			existingBooksList, err := getBooksByID(tx, []int64{existingBookID})
+			if err != nil {
+				return errors.Wrap(err, "get existing book")
+			}
+			existingBook = existingBooksList[0]
+		}
+		existingBook.Files = append(existingBook.Files, book.Files[0])
+		book = existingBook
 	}
 
 	res, err := tx.Exec(`insert into files (book_id, extension, original_filename, filename, file_size, file_mtime, hash, source)
@@ -212,7 +230,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		tx.Rollback()
 		return errors.Wrap(err, "Fetching new book ID")
 	}
-	book.Files[0].ID = id
+	book.Files[len(book.Files)-1].ID = id
 
 	for _, tag := range bf.Tags {
 		if err := insertTag(tx, tag, bf); err != nil {
@@ -243,10 +261,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 }
 
 func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
-	if !createNew && len(book.Files) != 1 {
-		return errors.New("Book to index must contain only one file")
-	}
-	bf := book.Files[0]
+	bf := book.Files[len(book.Files)-1]
 	joinedTags := strings.Join(bf.Tags, " ")
 	if createNew {
 		// Index book for searching.
@@ -286,7 +301,7 @@ func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
 	}
 	rows.Close()
 
-	_, err = tx.Exec("update books_fts set tags=?, extension=?, source=? where docid=?", tags+" "+joinedTags, extension+" "+bf.Extension, source+" "+bf.Source, id)
+	_, err = tx.Exec("update books_fts set tags=?, extension=?, source=?, series=? where docid=?", tags+" "+joinedTags, extension+" "+bf.Extension, source+" "+bf.Source, book.Series, id)
 	if err != nil {
 		return err
 	}
@@ -623,20 +638,30 @@ func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries 
 	if err != nil {
 		return errors.Wrap(err, "get transaction")
 	}
-	existingBooks, err := getBooksByID(tx, []int64{book.ID})
+	err = lib.updateBook(tx, book, tmpl, updateSeries)
 	if err != nil {
 		tx.Rollback()
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return errors.Wrap(err, "commit transaction")
+	}
+	return nil
+}
+
+func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, updateSeries bool) (err error) {
+	existingBooks, err := getBooksByID(tx, []int64{book.ID})
+	if err != nil {
 		return errors.Wrap(err, "get books by ID")
 	}
 	if len(existingBooks) == 0 {
-		tx.Rollback()
 		return errors.New("book not found")
 	}
 	existingBook := existingBooks[0]
 	if existingBook.Title == book.Title &&
 		authorsEqual(existingBook.Authors, book.Authors) &&
 		(!updateSeries || existingBook.Series == book.Series) {
-		tx.Rollback()
 		log.Printf("Not updating book %d because nothing changed", book.ID)
 		return nil
 	}
@@ -645,7 +670,6 @@ func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries 
 		return errors.Wrap(err, "find existing book")
 	}
 	if found && book.ID != existingBookID {
-		tx.Rollback()
 		return BookExistsError{"Book already exists", existingBookID}
 	}
 
@@ -657,35 +681,27 @@ func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries 
 			_, err = tx.Exec("update books set updated_on=datetime(), title=? where id=?", book.Title, book.ID)
 		}
 		if err != nil {
-			tx.Rollback()
 			return errors.Wrap(err, "update title")
 		}
 	}
 	if !authorsEqual(existingBook.Authors, book.Authors) {
 		_, err := tx.Exec("delete from books_authors where book_id=?", book.ID)
 		if err != nil {
-			tx.Rollback()
 			return errors.Wrap(err, "delete authors")
 		}
 		for _, author := range book.Authors {
 			if err := insertAuthor(tx, author, &book); err != nil {
-				tx.Rollback()
 				return errors.Wrap(err, "insert author")
 			}
 		}
 	}
 	_, err = tx.Exec("update books_fts set title=?, author=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.ID)
 	if err != nil {
-		tx.Rollback()
 		return errors.Wrap(err, "update book")
 	}
 	err = lib.updateFilenames(tx, book, tmpl, true)
 	if err != nil {
 		log.Printf("Error updating filenames: %s", err)
-	}
-	err = tx.Commit()
-	if err != nil {
-		return errors.Wrap(err, "update book")
 	}
 	log.Printf("Updated book %d with authors: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Title)
 	return nil
