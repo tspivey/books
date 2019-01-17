@@ -201,18 +201,17 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 			return errors.Wrap(err, "get existing book")
 		}
 		existingBook := existingBooksList[0]
-		if existingBook.Series == "" && book.Series != "" {
-			existingBook.Series = book.Series
-			err = lib.updateBook(tx, existingBook, tmpl, true)
-			if err != nil {
-				return errors.Wrap(err, "update book")
-			}
-			existingBooksList, err := getBooksByID(tx, []int64{existingBookID})
-			if err != nil {
-				return errors.Wrap(err, "get existing book")
-			}
-			existingBook = existingBooksList[0]
+		// Update the existing book series only if it's empty
+		existingBook.Series = book.Series
+		err = lib.updateBook(tx, existingBook, tmpl, false)
+		if err != nil {
+			return errors.Wrap(err, "update book")
 		}
+		existingBooksList, err = getBooksByID(tx, []int64{existingBookID})
+		if err != nil {
+			return errors.Wrap(err, "get existing book")
+		}
+		existingBook = existingBooksList[0]
 		existingBook.Files = append(existingBook.Files, book.Files[0])
 		book = existingBook
 	}
@@ -633,12 +632,13 @@ func (lib *Library) ConvertToEpub(file BookFile) error {
 }
 
 // UpdateBook updates the authors and title of an existing book in the database, specified by book.ID.
-func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries bool) error {
+// If the existing book's series is not empty, it will not be updated unless overwriteSeries is true.
+func (lib *Library) UpdateBook(book Book, tmpl *template.Template, overwriteSeries bool) error {
 	tx, err := lib.Begin()
 	if err != nil {
 		return errors.Wrap(err, "get transaction")
 	}
-	err = lib.updateBook(tx, book, tmpl, updateSeries)
+	err = lib.updateBook(tx, book, tmpl, overwriteSeries)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -650,7 +650,7 @@ func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries 
 	return nil
 }
 
-func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, updateSeries bool) (err error) {
+func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, overwriteSeries bool) (err error) {
 	existingBooks, err := getBooksByID(tx, []int64{book.ID})
 	if err != nil {
 		return errors.Wrap(err, "get books by ID")
@@ -659,9 +659,15 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, u
 		return errors.New("book not found")
 	}
 	existingBook := existingBooks[0]
+
+	// We should update the series in the database only if it is empty, unless overwriteSeries is true.
+	if existingBook.Series != "" && !overwriteSeries {
+		book.Series = existingBook.Series
+	}
+
 	if existingBook.Title == book.Title &&
 		authorsEqual(existingBook.Authors, book.Authors) &&
-		(!updateSeries || existingBook.Series == book.Series) {
+		existingBook.Series == book.Series {
 		log.Printf("Not updating book %d because nothing changed", book.ID)
 		return nil
 	}
@@ -674,12 +680,8 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, u
 	}
 
 	if book.Title != existingBook.Title ||
-		(updateSeries && book.Series != existingBook.Series) {
-		if updateSeries {
-			_, err = tx.Exec("update books set updated_on=datetime(), title=?, series=? where id=?", book.Title, book.Series, book.ID)
-		} else {
-			_, err = tx.Exec("update books set updated_on=datetime(), title=? where id=?", book.Title, book.ID)
-		}
+		book.Series != existingBook.Series {
+		_, err = tx.Exec("update books set updated_on=datetime(), title=?, series=? where id=?", book.Title, book.Series, book.ID)
 		if err != nil {
 			return errors.Wrap(err, "update title")
 		}
@@ -695,7 +697,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, u
 			}
 		}
 	}
-	_, err = tx.Exec("update books_fts set title=?, author=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.ID)
+	_, err = tx.Exec("update books_fts set title=?, author=?, series=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, book.ID)
 	if err != nil {
 		return errors.Wrap(err, "update book")
 	}
