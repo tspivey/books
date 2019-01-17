@@ -113,12 +113,16 @@ func moveFile(src, dst string) error {
 }
 
 // GetUniqueName checks to see if a file named f already exists, and if so, finds a unique name.
-func GetUniqueName(f string) (string, error) {
+// If, while ifnding a new name, the current filename is matched, just return the current filename.
+func GetUniqueName(f string, currentFilename string) (string, error) {
 	i := 1
 	ext := path.Ext(f)
 	newName := f
 	_, err := os.Stat(newName)
 	for err == nil {
+		if currentFilename == newName {
+			return currentFilename, nil
+		}
 		newName = fmt.Sprintf("%s (%d)%s", strings.TrimSuffix(f, ext), i, ext)
 		i++
 		_, err = os.Stat(newName)

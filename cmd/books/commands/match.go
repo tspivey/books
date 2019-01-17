@@ -166,7 +166,7 @@ func searchDupe(filename string, library *books.Library) error {
 		return errors.Wrap(err, "Calculate output filename for book")
 	}
 	s = books.TruncateFilename(s)
-	newFilename, err := books.GetUniqueName(filepath.Join(booksRoot, s))
+	newFilename, err := books.GetUniqueName(filepath.Join(booksRoot, s), "")
 	if err != nil {
 		return errors.Wrap(err, "get unique filename")
 	}

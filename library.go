@@ -665,12 +665,6 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 		book.Series = existingBook.Series
 	}
 
-	if existingBook.Title == book.Title &&
-		authorsEqual(existingBook.Authors, book.Authors) &&
-		existingBook.Series == book.Series {
-		log.Printf("Not updating book %d because nothing changed", book.ID)
-		return nil
-	}
 	existingBookID, found, err := getBookIDByTitleAndAuthors(tx, book.Title, book.Authors)
 	if err != nil {
 		return errors.Wrap(err, "find existing book")
@@ -832,9 +826,17 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 		if bf.CurrentFilename == newFn {
 			continue
 		}
-		newPath, err := GetUniqueName(filepath.Join(lib.booksRoot, newFn))
+		currentFilename := bf.CurrentFilename
+		if !filepath.IsAbs(currentFilename) {
+			currentFilename = filepath.Join(lib.booksRoot, currentFilename)
+		}
+		newPath, err := GetUniqueName(filepath.Join(lib.booksRoot, newFn), currentFilename)
 		if err != nil {
 			return errors.Wrap(err, "get unique name")
+		}
+		if currentFilename == newPath {
+			log.Printf("Not renaming %s", newFn)
+			continue
 		}
 		relPath, err := filepath.Rel(lib.booksRoot, newPath)
 		if err != nil {
