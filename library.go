@@ -147,13 +147,12 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 	if len(book.Files) != 1 {
 		return errors.New("Book to import must contain only one file")
 	}
-	bf := &book.Files[0]
 	tx, err := lib.Begin()
 	if err != nil {
 		return err
 	}
 
-	rows, err := tx.Query("select id from files where hash=?", bf.Hash)
+	rows, err := tx.Query("select id from files where hash=?", book.Files[0].Hash)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -169,7 +168,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 	rows.Close()
 	if rows.Err() != nil {
 		tx.Rollback()
-		return errors.Wrapf(err, "Searching for duplicate book by hash %s", bf.Hash)
+		return errors.Wrapf(err, "Searching for duplicate book by hash %s", book.Files[0].Hash)
 	}
 
 	existingBookID, found, err := getBookIDByTitleAndAuthors(tx, book.Title, book.Authors)
@@ -216,6 +215,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		book = existingBook
 	}
 
+	bf := &book.Files[len(book.Files)-1]
 	res, err := tx.Exec(`insert into files (book_id, extension, original_filename, filename, file_size, file_mtime, hash, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
 		book.ID, bf.Extension, bf.OriginalFilename, bf.CurrentFilename, bf.FileSize, bf.FileMtime, bf.Hash, bf.Source)
@@ -354,7 +354,7 @@ func insertTag(tx *sql.Tx, tag string, bf *BookFile) error {
 	// Tag inserted, insert the link
 	// Avoid duplicate tags.
 	if _, err := tx.Exec("insert or ignore into files_tags (file_id, tag_id) values(?, ?)", bf.ID, tagID); err != nil {
-		return err
+		return errors.Wrap(err, "inserting tag link")
 	}
 	return nil
 }
