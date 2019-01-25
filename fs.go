@@ -113,7 +113,7 @@ func moveFile(src, dst string) error {
 }
 
 // GetUniqueName checks to see if a file named f already exists, and if so, finds a unique name.
-// If, while ifnding a new name, the current filename is matched, just return the current filename.
+// If, while finding a new name, the current filename is matched, just return the current filename.
 func GetUniqueName(f string, currentFilename string) (string, error) {
 	i := 1
 	ext := path.Ext(f)
