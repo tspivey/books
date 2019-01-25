@@ -677,7 +677,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 		book.Series != existingBook.Series {
 		_, err = tx.Exec("update books set updated_on=datetime(), title=?, series=? where id=?", book.Title, book.Series, book.ID)
 		if err != nil {
-			return errors.Wrap(err, "update title")
+			return errors.Wrap(err, "update book")
 		}
 	}
 	if !authorsEqual(existingBook.Authors, book.Authors) {
