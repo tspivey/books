@@ -110,7 +110,7 @@ func searchFor(field string, items []string) []string {
 	return newItems
 }
 
-// changeExt changes the extension of pathname to ext, which should include ..
+// changeExt changes the extension of pathname to ext. ext must include a preceding dot.
 func changeExt(pathname string, ext string) string {
 	return strings.TrimSuffix(pathname, path.Ext(pathname)) + ext
 }
