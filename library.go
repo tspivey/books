@@ -693,13 +693,13 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 	}
 	_, err = tx.Exec("update books_fts set title=?, author=?, series=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, book.ID)
 	if err != nil {
-		return errors.Wrap(err, "update book")
+		return errors.Wrap(err, "update fts")
 	}
 	err = lib.updateFilenames(tx, book, tmpl, true)
 	if err != nil {
 		log.Printf("Error updating filenames: %s", err)
 	}
-	log.Printf("Updated book %d with authors: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Title)
+	log.Printf("Updated book %d with authors: %s series: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Series, book.Title)
 	return nil
 }
 
