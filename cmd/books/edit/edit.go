@@ -124,6 +124,7 @@ var seriesCmd = &DefaultCommand{
 var saveCmd = &DefaultCommand{
 	Help: "Saves the currently edited book",
 	Run: func(cmd *DefaultCommand, args string) {
+		newID := cmd.parser.book.ID
 		err := cmd.parser.lib.UpdateBook(*cmd.parser.book, cmd.parser.OutputTemplate, true)
 		if bee, ok := err.(books.BookExistsError); ok {
 			if args == "-m" {
@@ -133,6 +134,7 @@ var saveCmd = &DefaultCommand{
 					return
 				}
 				fmt.Printf("Merged into %d\n", bee.BookID)
+				newID = bee.BookID
 			} else {
 				fmt.Printf("A duplicate book already exists, id: %d. To merge, type save -m.\n", bee.BookID)
 				return
@@ -141,6 +143,16 @@ var saveCmd = &DefaultCommand{
 			fmt.Fprintf(os.Stderr, "error while updating book: %v\n", err)
 			return
 		}
+		newBooks, err := cmd.parser.lib.GetBooksByID([]int64{newID})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error retrieving updated book: %v\n", err)
+			os.Exit(1)
+		}
+		if len(newBooks) != 1 {
+			fmt.Fprintf(os.Stderr, "Expected 1 updated book, got %d\n", len(newBooks))
+			os.Exit(1)
+		}
+		cmd.parser.book = &newBooks[0]
 	},
 	completer: func(cmd *DefaultCommand, s string) []string {
 		if !strings.HasPrefix("save", s) {
