@@ -87,6 +87,7 @@ unique (file_id, tag_id)
 );
 
 create virtual table books_fts using fts4 (author, series, title, extension, tags,  filename, source);
+create index idx_books_nocase_title on books(title collate nocase);
 `
 
 func init() {
@@ -680,7 +681,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 			return errors.Wrap(err, "update book")
 		}
 	}
-	if !authorsEqual(existingBook.Authors, book.Authors) {
+	if !authorsEqual(existingBook.Authors, book.Authors, false) {
 		_, err := tx.Exec("delete from books_authors where book_id=?", book.ID)
 		if err != nil {
 			return errors.Wrap(err, "delete authors")
@@ -714,7 +715,7 @@ func (lib *Library) GetBookIDByTitleAndAuthors(title string, authors []string) (
 }
 
 func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int64, bool, error) {
-	rows, err := tx.Query("SELECT id FROM books WHERE title = ?", title)
+	rows, err := tx.Query("SELECT id FROM books WHERE title = ? COLLATE NOCASE", title)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "get book by title")
 	}
@@ -737,7 +738,7 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	}
 
 	for bookID, authorNames := range authorMap {
-		if authorsEqual(authors, authorNames) {
+		if authorsEqual(authors, authorNames, true) {
 			return bookID, true, nil
 		}
 	}
@@ -859,12 +860,16 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 	return nil
 }
 
-func authorsEqual(a, b []string) bool {
+func authorsEqual(a, b []string, ignoreCase bool) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		author1, author2 := a[i], b[i]
+		if ignoreCase {
+			author1, author2 = strings.ToLower(author1), strings.ToLower(author2)
+		}
+		if author1 != author2 {
 			return false
 		}
 	}
