@@ -147,13 +147,12 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 	if len(book.Files) != 1 {
 		return errors.New("Book to import must contain only one file")
 	}
-	bf := &book.Files[0]
 	tx, err := lib.Begin()
 	if err != nil {
 		return err
 	}
 
-	rows, err := tx.Query("select id from files where hash=?", bf.Hash)
+	rows, err := tx.Query("select id from files where hash=?", book.Files[0].Hash)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -169,7 +168,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 	rows.Close()
 	if rows.Err() != nil {
 		tx.Rollback()
-		return errors.Wrapf(err, "Searching for duplicate book by hash %s", bf.Hash)
+		return errors.Wrapf(err, "Searching for duplicate book by hash %s", book.Files[0].Hash)
 	}
 
 	existingBookID, found, err := getBookIDByTitleAndAuthors(tx, book.Title, book.Authors)
@@ -196,9 +195,27 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		}
 
 	} else {
-		book.ID = existingBookID
+		existingBooksList, err := getBooksByID(tx, []int64{existingBookID})
+		if err != nil {
+			return errors.Wrap(err, "get existing book")
+		}
+		existingBook := existingBooksList[0]
+		// Update the existing book series only if it's empty
+		existingBook.Series = book.Series
+		err = lib.updateBook(tx, existingBook, tmpl, false)
+		if err != nil {
+			return errors.Wrap(err, "update book")
+		}
+		existingBooksList, err = getBooksByID(tx, []int64{existingBookID})
+		if err != nil {
+			return errors.Wrap(err, "get existing book")
+		}
+		existingBook = existingBooksList[0]
+		existingBook.Files = append(existingBook.Files, book.Files[0])
+		book = existingBook
 	}
 
+	bf := &book.Files[len(book.Files)-1]
 	res, err := tx.Exec(`insert into files (book_id, extension, original_filename, filename, file_size, file_mtime, hash, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
 		book.ID, bf.Extension, bf.OriginalFilename, bf.CurrentFilename, bf.FileSize, bf.FileMtime, bf.Hash, bf.Source)
@@ -212,7 +229,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		tx.Rollback()
 		return errors.Wrap(err, "Fetching new book ID")
 	}
-	book.Files[0].ID = id
+	book.Files[len(book.Files)-1].ID = id
 
 	for _, tag := range bf.Tags {
 		if err := insertTag(tx, tag, bf); err != nil {
@@ -243,10 +260,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 }
 
 func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
-	if !createNew && len(book.Files) != 1 {
-		return errors.New("Book to index must contain only one file")
-	}
-	bf := book.Files[0]
+	bf := book.Files[len(book.Files)-1]
 	joinedTags := strings.Join(bf.Tags, " ")
 	if createNew {
 		// Index book for searching.
@@ -286,7 +300,7 @@ func indexBookInSearch(tx *sql.Tx, book *Book, createNew bool) error {
 	}
 	rows.Close()
 
-	_, err = tx.Exec("update books_fts set tags=?, extension=?, source=? where docid=?", tags+" "+joinedTags, extension+" "+bf.Extension, source+" "+bf.Source, id)
+	_, err = tx.Exec("update books_fts set tags=?, extension=?, source=?, series=? where docid=?", tags+" "+joinedTags, extension+" "+bf.Extension, source+" "+bf.Source, book.Series, id)
 	if err != nil {
 		return err
 	}
@@ -340,7 +354,7 @@ func insertTag(tx *sql.Tx, tag string, bf *BookFile) error {
 	// Tag inserted, insert the link
 	// Avoid duplicate tags.
 	if _, err := tx.Exec("insert or ignore into files_tags (file_id, tag_id) values(?, ?)", bf.ID, tagID); err != nil {
-		return err
+		return errors.Wrap(err, "inserting tag link")
 	}
 	return nil
 }
@@ -618,76 +632,74 @@ func (lib *Library) ConvertToEpub(file BookFile) error {
 }
 
 // UpdateBook updates the authors and title of an existing book in the database, specified by book.ID.
-func (lib *Library) UpdateBook(book Book, tmpl *template.Template, updateSeries bool) error {
+// If the existing book's series is not empty, it will not be updated unless overwriteSeries is true.
+func (lib *Library) UpdateBook(book Book, tmpl *template.Template, overwriteSeries bool) error {
 	tx, err := lib.Begin()
 	if err != nil {
 		return errors.Wrap(err, "get transaction")
 	}
-	existingBooks, err := getBooksByID(tx, []int64{book.ID})
+	err = lib.updateBook(tx, book, tmpl, overwriteSeries)
 	if err != nil {
 		tx.Rollback()
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return errors.Wrap(err, "commit transaction")
+	}
+	return nil
+}
+
+func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, overwriteSeries bool) (err error) {
+	existingBooks, err := getBooksByID(tx, []int64{book.ID})
+	if err != nil {
 		return errors.Wrap(err, "get books by ID")
 	}
 	if len(existingBooks) == 0 {
-		tx.Rollback()
 		return errors.New("book not found")
 	}
 	existingBook := existingBooks[0]
-	if existingBook.Title == book.Title &&
-		authorsEqual(existingBook.Authors, book.Authors) &&
-		(!updateSeries || existingBook.Series == book.Series) {
-		tx.Rollback()
-		log.Printf("Not updating book %d because nothing changed", book.ID)
-		return nil
+
+	// We should update the series in the database only if it is empty, unless overwriteSeries is true.
+	if existingBook.Series != "" && !overwriteSeries {
+		book.Series = existingBook.Series
 	}
+
 	existingBookID, found, err := getBookIDByTitleAndAuthors(tx, book.Title, book.Authors)
 	if err != nil {
 		return errors.Wrap(err, "find existing book")
 	}
 	if found && book.ID != existingBookID {
-		tx.Rollback()
 		return BookExistsError{"Book already exists", existingBookID}
 	}
 
 	if book.Title != existingBook.Title ||
-		(updateSeries && book.Series != existingBook.Series) {
-		if updateSeries {
-			_, err = tx.Exec("update books set updated_on=datetime(), title=?, series=? where id=?", book.Title, book.Series, book.ID)
-		} else {
-			_, err = tx.Exec("update books set updated_on=datetime(), title=? where id=?", book.Title, book.ID)
-		}
+		book.Series != existingBook.Series {
+		_, err = tx.Exec("update books set updated_on=datetime(), title=?, series=? where id=?", book.Title, book.Series, book.ID)
 		if err != nil {
-			tx.Rollback()
-			return errors.Wrap(err, "update title")
+			return errors.Wrap(err, "update book")
 		}
 	}
 	if !authorsEqual(existingBook.Authors, book.Authors) {
 		_, err := tx.Exec("delete from books_authors where book_id=?", book.ID)
 		if err != nil {
-			tx.Rollback()
 			return errors.Wrap(err, "delete authors")
 		}
 		for _, author := range book.Authors {
 			if err := insertAuthor(tx, author, &book); err != nil {
-				tx.Rollback()
 				return errors.Wrap(err, "insert author")
 			}
 		}
 	}
-	_, err = tx.Exec("update books_fts set title=?, author=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.ID)
+	_, err = tx.Exec("update books_fts set title=?, author=?, series=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, book.ID)
 	if err != nil {
-		tx.Rollback()
-		return errors.Wrap(err, "update book")
+		return errors.Wrap(err, "update fts")
 	}
 	err = lib.updateFilenames(tx, book, tmpl, true)
 	if err != nil {
 		log.Printf("Error updating filenames: %s", err)
 	}
-	err = tx.Commit()
-	if err != nil {
-		return errors.Wrap(err, "update book")
-	}
-	log.Printf("Updated book %d with authors: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Title)
+	log.Printf("Updated book %d with authors: %s series: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Series, book.Title)
 	return nil
 }
 
@@ -814,9 +826,17 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 		if bf.CurrentFilename == newFn {
 			continue
 		}
-		newPath, err := GetUniqueName(filepath.Join(lib.booksRoot, newFn))
+		currentFilename := bf.CurrentFilename
+		if !filepath.IsAbs(currentFilename) {
+			currentFilename = filepath.Join(lib.booksRoot, currentFilename)
+		}
+		newPath, err := GetUniqueName(filepath.Join(lib.booksRoot, newFn), currentFilename)
 		if err != nil {
 			return errors.Wrap(err, "get unique name")
+		}
+		if currentFilename == newPath {
+			log.Printf("Not renaming %s", newFn)
+			continue
 		}
 		relPath, err := filepath.Rel(lib.booksRoot, newPath)
 		if err != nil {
