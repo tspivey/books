@@ -29,6 +29,9 @@ func (bee BookExistsError) Error() string {
 	return bee.err
 }
 
+// ErrBookNotFound is returned when a book is not found in the database.
+var ErrBookNotFound = errors.New("book not found")
+
 var initialSchema = `create table books (
 id integer primary key,
 created_on timestamp not null default (datetime()),
@@ -657,7 +660,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 		return errors.Wrap(err, "get books by ID")
 	}
 	if len(existingBooks) == 0 {
-		return errors.New("book not found")
+		return ErrBookNotFound
 	}
 	existingBook := existingBooks[0]
 
@@ -811,7 +814,7 @@ func (lib *Library) GetBookIDByFilename(fn string) (int64, error) {
 		return id, nil
 	}
 	rows.Close()
-	return 0, errors.New("book not found")
+	return 0, ErrBookNotFound
 }
 
 func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Template, move bool) error {

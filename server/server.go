@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	txtTemplate "text/template"
 
 	auth "github.com/abbot/go-http-auth"
 	"github.com/gorilla/mux"
@@ -19,23 +20,25 @@ import (
 
 // Server is the web server which handles searching for, downloading and converting books.
 type Server struct {
-	lib          *books.Library
-	converter    BookConverter
-	templates    *template.Template
-	hsrv         *http.Server
-	itemsPerPage int
-	booksRoot    string
+	lib            *books.Library
+	converter      BookConverter
+	templates      *template.Template
+	hsrv           *http.Server
+	itemsPerPage   int
+	booksRoot      string
+	outputTemplate *txtTemplate.Template
 }
 
 // Config is the configuration of the server, used in New.
 type Config struct {
-	Lib          *books.Library
-	TemplatesDir string
-	Converter    BookConverter
-	ItemsPerPage int
-	Hsrv         *http.Server
-	HtpasswdFile string
-	BooksRoot    string
+	Lib            *books.Library
+	TemplatesDir   string
+	Converter      BookConverter
+	ItemsPerPage   int
+	Hsrv           *http.Server
+	HtpasswdFile   string
+	BooksRoot      string
+	OutputTemplate *txtTemplate.Template
 }
 
 // New creates a new server.
@@ -49,12 +52,13 @@ func New(cfg *Config) *Server {
 		"changeExt":     changeExt,
 	}
 	srv := &Server{
-		lib:          cfg.Lib,
-		templates:    template.Must(template.New("template").Funcs(htmlFuncMap).ParseGlob(path.Join(cfg.TemplatesDir, "*.html"))),
-		converter:    cfg.Converter,
-		hsrv:         cfg.Hsrv,
-		itemsPerPage: cfg.ItemsPerPage,
-		booksRoot:    cfg.BooksRoot,
+		lib:            cfg.Lib,
+		templates:      template.Must(template.New("template").Funcs(htmlFuncMap).ParseGlob(path.Join(cfg.TemplatesDir, "*.html"))),
+		converter:      cfg.Converter,
+		hsrv:           cfg.Hsrv,
+		itemsPerPage:   cfg.ItemsPerPage,
+		booksRoot:      cfg.BooksRoot,
+		outputTemplate: cfg.OutputTemplate,
 	}
 
 	r := mux.NewRouter()
@@ -63,7 +67,10 @@ func New(cfg *Config) *Server {
 	r.HandleFunc("/download/{id:\\d+}/{name:.+}", srv.downloadHandler)
 	r.HandleFunc("/download/{id:\\d+}", srv.downloadHandler)
 	r.HandleFunc("/search/", srv.searchHandler)
-
+	apiRouter := r.PathPrefix("/api/").Subrouter()
+	apiRouter.HandleFunc("/book/{id:\\d+}", srv.getBookHandler)
+	apiRouter.HandleFunc("/update", srv.updateBookHandler).Methods("POST")
+	apiRouter.HandleFunc("/merge", srv.mergeHandler).Methods("POST")
 	secProvider := auth.HtpasswdFileProvider(cfg.HtpasswdFile)
 	authHandler := auth.NewBasicAuthenticator("Basic Realm", secProvider)
 	handler := http.Handler(r)
