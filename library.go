@@ -695,6 +695,25 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 			}
 		}
 	}
+	for i, f := range book.Files {
+		if f.ID != existingBook.Files[i].ID {
+			// Someone tried to delete from/reorder the files list, which isn't currently supported.
+			return errors.New("file list reorder not supported")
+		}
+		if authorsEqual(existingBook.Files[i].Tags, f.Tags, false) {
+			continue
+		}
+		_, err = tx.Exec("delete from files_tags where file_id=?", f.ID)
+		if err != nil {
+			return errors.Wrap(err, "delete existing file tags")
+		}
+		for _, t := range f.Tags {
+			err := insertTag(tx, t, &f)
+			if err != nil {
+				return errors.Wrap(err, "insert tag")
+			}
+		}
+	}
 	_, err = tx.Exec("update books_fts set title=?, author=?, series=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, book.ID)
 	if err != nil {
 		return errors.Wrap(err, "update fts")
