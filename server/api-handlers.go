@@ -51,7 +51,8 @@ func (srv *Server) updateBookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	err := srv.lib.UpdateBook(book, srv.outputTemplate, ub.OverwriteSeries)
 	if bee, ok := err.(books.BookExistsError); ok {
-		writeJSON(w, Error{"Book exists: " + string(bee.BookID)})
+		msg := fmt.Sprintf("Book exists: %d", bee.BookID)
+		writeJSON(w, Error{msg})
 		return
 	}
 	if err == books.ErrBookNotFound {
