@@ -83,6 +83,26 @@ func (srv *Server) mergeHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, Success{"merged"})
 }
 
+func (srv *Server) apiSearchHandler(w http.ResponseWriter, r *http.Request) {
+	term, ok := r.URL.Query()["term"]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, Error{"no term specified"})
+		return
+	}
+	bookList, err := srv.lib.Search(term[0])
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error searching for book: %v", err)
+		return
+	}
+	newList := []Book{}
+	for i := range bookList {
+		newList = append(newList, BookToModel(bookList[i]))
+	}
+	writeJSON(w, newList)
+}
+
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	b, err := json.Marshal(v)
 	if err != nil {

@@ -71,6 +71,7 @@ func New(cfg *Config) *Server {
 	apiRouter.HandleFunc("/book/{id:\\d+}", srv.getBookHandler)
 	apiRouter.HandleFunc("/update", srv.updateBookHandler).Methods("POST")
 	apiRouter.HandleFunc("/merge", srv.mergeHandler).Methods("POST")
+	apiRouter.HandleFunc("/search", srv.apiSearchHandler)
 	secProvider := auth.HtpasswdFileProvider(cfg.HtpasswdFile)
 	authHandler := auth.NewBasicAuthenticator("Basic Realm", secProvider)
 	handler := http.Handler(r)
