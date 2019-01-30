@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	txtTemplate "text/template"
 
 	auth "github.com/abbot/go-http-auth"
@@ -17,6 +18,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tspivey/books"
 )
+
+var mutex = &sync.Mutex{}
 
 // Server is the web server which handles searching for, downloading and converting books.
 type Server struct {
@@ -68,6 +71,13 @@ func New(cfg *Config) *Server {
 	r.HandleFunc("/download/{id:\\d+}", srv.downloadHandler)
 	r.HandleFunc("/search/", srv.searchHandler)
 	apiRouter := r.PathPrefix("/api/").Subrouter()
+	key := os.Getenv("BOOKS_API_KEY")
+	if key == "" {
+		log.Printf("Warning: BOOKS_API_KEY not set; API disabled")
+	}
+	apiRouter.Use(func(next http.Handler) http.Handler {
+		return apiKeyMiddleware(key, next)
+	})
 	apiRouter.HandleFunc("/book/{id:\\d+}", srv.getBookHandler)
 	apiRouter.HandleFunc("/update", srv.updateBookHandler).Methods("POST")
 	apiRouter.HandleFunc("/merge", srv.mergeHandler).Methods("POST")
@@ -121,4 +131,17 @@ func searchFor(field string, items []string) []string {
 // changeExt changes the extension of pathname to ext. ext must include a preceding dot.
 func changeExt(pathname string, ext string) string {
 	return strings.TrimSuffix(pathname, path.Ext(pathname)) + ext
+}
+
+func apiKeyMiddleware(key string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if key == "" || r.Header.Get("x-API-key") != key {
+			w.WriteHeader(http.StatusForbidden)
+			writeJSON(w, Error{"forbidden"})
+			return
+		}
+		mutex.Lock()
+		next.ServeHTTP(w, r)
+		mutex.Unlock()
+	})
 }
