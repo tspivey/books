@@ -695,10 +695,14 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 			}
 		}
 	}
+	var tags []string
 	for i, f := range book.Files {
 		if f.ID != existingBook.Files[i].ID {
 			// Someone tried to delete from/reorder the files list, which isn't currently supported.
 			return errors.New("file list reorder not supported")
+		}
+		for _, t := range f.Tags {
+			tags = append(tags, t)
 		}
 		if authorsEqual(existingBook.Files[i].Tags, f.Tags, false) {
 			continue
@@ -714,7 +718,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 			}
 		}
 	}
-	_, err = tx.Exec("update books_fts set title=?, author=?, series=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, book.ID)
+	_, err = tx.Exec("update books_fts set title=?, author=?, series=?, tags=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, strings.Join(tags, " "), book.ID)
 	if err != nil {
 		return errors.Wrap(err, "update fts")
 	}
