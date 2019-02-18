@@ -109,7 +109,7 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, string(b))
+	w.Write(b)
 }
 
 func readPostedJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool {
