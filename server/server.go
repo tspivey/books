@@ -137,7 +137,7 @@ func apiKeyMiddleware(key string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if key == "" || r.Header.Get("x-API-key") != key {
 			w.WriteHeader(http.StatusForbidden)
-			writeJSON(w, Error{"forbidden"})
+			writeJSON(w, apiError{"forbidden"})
 			return
 		}
 		mutex.Lock()

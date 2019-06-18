@@ -6,7 +6,7 @@ import (
 	"github.com/tspivey/books"
 )
 
-type Error struct {
+type apiError struct {
 	Error string `json:"error"`
 }
 
@@ -31,16 +31,16 @@ type BookFile struct {
 	Size             int64     `json:"size"`
 }
 
-type UpdateBook struct {
+type updateBook struct {
 	Book            Book `json:"book"`
 	OverwriteSeries bool `json:"overwrite_series"`
 }
 
-type Success struct {
+type success struct {
 	Success string `json:"success"`
 }
 
-func BookToModel(book books.Book) Book {
+func bookToModel(book books.Book) Book {
 	modelFiles := make([]BookFile, 0)
 	for _, file := range book.Files {
 		newFile := BookFile{
@@ -74,7 +74,7 @@ func BookToModel(book books.Book) Book {
 	return newBook
 }
 
-func ModelToBook(modelBook Book) books.Book {
+func modelToBook(modelBook Book) books.Book {
 	files := make([]books.BookFile, 0)
 	for _, file := range modelBook.Files {
 		newFile := books.BookFile{

@@ -28,45 +28,45 @@ func (srv *Server) getBookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(bookList) == 0 {
 		w.WriteHeader(http.StatusNotFound)
-		writeJSON(w, Error{"no books"})
+		writeJSON(w, apiError{"no books"})
 		return
 	}
-	model := BookToModel(bookList[0])
+	model := bookToModel(bookList[0])
 	writeJSON(w, model)
 }
 
 func (srv *Server) updateBookHandler(w http.ResponseWriter, r *http.Request) {
-	var ub UpdateBook
+	var ub updateBook
 	if !readPostedJSON(w, r, &ub) {
 		return
 	}
-	book := ModelToBook(ub.Book)
+	book := modelToBook(ub.Book)
 	if book.ID == 0 {
-		writeJSON(w, Error{"no book ID"})
+		writeJSON(w, apiError{"no book ID"})
 		return
 	}
 	if book.Title == "" || len(book.Authors) == 0 {
-		writeJSON(w, Error{"no title/authors"})
+		writeJSON(w, apiError{"no title/authors"})
 		return
 	}
 	err := srv.lib.UpdateBook(book, srv.outputTemplate, ub.OverwriteSeries)
 	if bee, ok := err.(books.BookExistsError); ok {
 		msg := fmt.Sprintf("Book exists: %d", bee.BookID)
-		writeJSON(w, Error{msg})
+		writeJSON(w, apiError{msg})
 		return
 	}
 	if err == books.ErrBookNotFound {
 		w.WriteHeader(http.StatusNotFound)
-		writeJSON(w, Error{"book not found"})
+		writeJSON(w, apiError{"book not found"})
 		return
 	}
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("Error updating book %d: %v", book.ID, err)
-		writeJSON(w, Error{"internal server error"})
+		writeJSON(w, apiError{"internal server error"})
 		return
 	}
-	writeJSON(w, Success{"updated"})
+	writeJSON(w, success{"updated"})
 }
 
 func (srv *Server) mergeHandler(w http.ResponseWriter, r *http.Request) {
@@ -77,17 +77,17 @@ func (srv *Server) mergeHandler(w http.ResponseWriter, r *http.Request) {
 	if err := srv.lib.MergeBooks(ids, srv.outputTemplate); err != nil {
 		log.Printf("error merging books: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		writeJSON(w, Error{"error merging books"})
+		writeJSON(w, apiError{"error merging books"})
 		return
 	}
-	writeJSON(w, Success{"merged"})
+	writeJSON(w, success{"merged"})
 }
 
 func (srv *Server) apiSearchHandler(w http.ResponseWriter, r *http.Request) {
 	term, ok := r.URL.Query()["term"]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(w, Error{"no term specified"})
+		writeJSON(w, apiError{"no term specified"})
 		return
 	}
 	bookList, err := srv.lib.Search(term[0])
@@ -98,7 +98,7 @@ func (srv *Server) apiSearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	newList := []Book{}
 	for i := range bookList {
-		newList = append(newList, BookToModel(bookList[i]))
+		newList = append(newList, bookToModel(bookList[i]))
 	}
 	writeJSON(w, newList)
 }
@@ -125,7 +125,7 @@ func readPostedJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool 
 	}
 	if err := json.Unmarshal(body, &v); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(w, Error{err.Error()})
+		writeJSON(w, apiError{err.Error()})
 		return false
 	}
 	return true
