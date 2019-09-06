@@ -19,8 +19,6 @@ import (
 	"github.com/tspivey/books"
 )
 
-var mutex = &sync.Mutex{}
-
 // Server is the web server which handles searching for, downloading and converting books.
 type Server struct {
 	lib            *books.Library
@@ -75,10 +73,11 @@ func New(cfg *Config) *Server {
 	if key == "" {
 		log.Printf("Warning: BOOKS_API_KEY not set; API disabled")
 	}
+	apiLock := &sync.Mutex{}
 	apiRouter.Use(func(next http.Handler) http.Handler {
-		return apiKeyMiddleware(key, next)
+		return apiKeyMiddleware(key, next, apiLock)
 	})
-	apiRouter.HandleFunc("/book/{id:\\d+}", srv.getBookHandler)
+	apiRouter.HandleFunc(`/book/{id:\d+}`, srv.getBookHandler)
 	apiRouter.HandleFunc("/update", srv.updateBookHandler).Methods("POST")
 	apiRouter.HandleFunc("/merge", srv.mergeHandler).Methods("POST")
 	apiRouter.HandleFunc("/search", srv.apiSearchHandler)
@@ -133,15 +132,15 @@ func changeExt(pathname string, ext string) string {
 	return strings.TrimSuffix(pathname, path.Ext(pathname)) + ext
 }
 
-func apiKeyMiddleware(key string, next http.Handler) http.Handler {
+func apiKeyMiddleware(key string, next http.Handler, apiLock *sync.Mutex) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if key == "" || r.Header.Get("x-API-key") != key {
 			w.WriteHeader(http.StatusForbidden)
 			writeJSON(w, apiError{"forbidden"})
 			return
 		}
-		mutex.Lock()
+		apiLock.Lock()
 		next.ServeHTTP(w, r)
-		mutex.Unlock()
+		apiLock.Unlock()
 	})
 }

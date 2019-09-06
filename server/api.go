@@ -26,7 +26,7 @@ type BookFile struct {
 	Tags             []string  `json:"tags"`
 	Hash             string    `json:"hash"`
 	OriginalFilename string    `json:"original_filename"`
-	CurrentFilename  string    `json:"filename"`
+	Filename         string    `json:"filename"`
 	Mtime            time.Time `json:"mtime"`
 	Size             int64     `json:"size"`
 }
@@ -49,7 +49,7 @@ func bookToModel(book books.Book) Book {
 			Tags:             file.Tags,
 			Hash:             file.Hash,
 			OriginalFilename: file.OriginalFilename,
-			CurrentFilename:  file.CurrentFilename,
+			Filename:         file.CurrentFilename,
 			Mtime:            file.FileMtime,
 			Size:             file.FileSize,
 		}
@@ -68,9 +68,6 @@ func bookToModel(book books.Book) Book {
 	if newBook.Authors == nil {
 		newBook.Authors = make([]string, 0)
 	}
-	if newBook.Files == nil {
-		newBook.Files = make([]BookFile, 0)
-	}
 	return newBook
 }
 
@@ -83,7 +80,7 @@ func modelToBook(modelBook Book) books.Book {
 			Tags:             file.Tags,
 			Hash:             file.Hash,
 			OriginalFilename: file.OriginalFilename,
-			CurrentFilename:  file.CurrentFilename,
+			CurrentFilename:  file.Filename,
 			FileMtime:        file.Mtime,
 			FileSize:         file.Size,
 		}

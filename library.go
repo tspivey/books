@@ -684,7 +684,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 			return errors.Wrap(err, "update book")
 		}
 	}
-	if !authorsEqual(existingBook.Authors, book.Authors, false) {
+	if !stringSlicesEqual(existingBook.Authors, book.Authors, false) {
 		_, err := tx.Exec("delete from books_authors where book_id=?", book.ID)
 		if err != nil {
 			return errors.Wrap(err, "delete authors")
@@ -704,7 +704,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 		for _, t := range f.Tags {
 			tags = append(tags, t)
 		}
-		if authorsEqual(existingBook.Files[i].Tags, f.Tags, false) {
+		if stringSlicesEqual(existingBook.Files[i].Tags, f.Tags, false) {
 			continue
 		}
 		_, err = tx.Exec("delete from files_tags where file_id=?", f.ID)
@@ -764,7 +764,7 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	}
 
 	for bookID, authorNames := range authorMap {
-		if authorsEqual(authors, authorNames, true) {
+		if stringSlicesEqual(authors, authorNames, true) {
 			return bookID, true, nil
 		}
 	}
@@ -886,7 +886,7 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 	return nil
 }
 
-func authorsEqual(a, b []string, ignoreCase bool) bool {
+func stringSlicesEqual(a, b []string, ignoreCase bool) bool {
 	if len(a) != len(b) {
 		return false
 	}
