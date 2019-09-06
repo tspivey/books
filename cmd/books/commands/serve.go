@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
+	"text/template"
 	"time"
 
 	"github.com/tspivey/books"
@@ -66,14 +68,22 @@ func runServer(cmd *cobra.Command, args []string) {
 		IdleTimeout:  viper.GetDuration("server.idle_timeout") * time.Second,
 	}
 
+	outputTmplSrc := viper.GetString("output_template")
+	outputTmpl, err := template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": books.Escape}).Parse(outputTmplSrc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
+		os.Exit(1)
+	}
+
 	cfg := &server.Config{
-		Lib:          lib,
-		TemplatesDir: templatesDir,
-		Converter:    converter,
-		ItemsPerPage: viper.GetInt("server.items_per_page"),
-		Hsrv:         hsrv,
-		HtpasswdFile: htpasswdFile,
-		BooksRoot:    booksRoot,
+		Lib:            lib,
+		TemplatesDir:   templatesDir,
+		Converter:      converter,
+		ItemsPerPage:   viper.GetInt("server.items_per_page"),
+		Hsrv:           hsrv,
+		HtpasswdFile:   htpasswdFile,
+		BooksRoot:      booksRoot,
+		OutputTemplate: outputTmpl,
 	}
 	srv := server.New(cfg)
 	log.Printf("Listening on %s", hsrv.Addr)

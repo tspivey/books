@@ -29,6 +29,9 @@ func (bee BookExistsError) Error() string {
 	return bee.err
 }
 
+// ErrBookNotFound is returned when a book is not found in the database.
+var ErrBookNotFound = errors.New("book not found")
+
 var initialSchema = `create table books (
 id integer primary key,
 created_on timestamp not null default (datetime()),
@@ -657,7 +660,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 		return errors.Wrap(err, "get books by ID")
 	}
 	if len(existingBooks) == 0 {
-		return errors.New("book not found")
+		return ErrBookNotFound
 	}
 	existingBook := existingBooks[0]
 
@@ -681,7 +684,7 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 			return errors.Wrap(err, "update book")
 		}
 	}
-	if !authorsEqual(existingBook.Authors, book.Authors, false) {
+	if !stringSlicesEqual(existingBook.Authors, book.Authors, false) {
 		_, err := tx.Exec("delete from books_authors where book_id=?", book.ID)
 		if err != nil {
 			return errors.Wrap(err, "delete authors")
@@ -692,7 +695,30 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 			}
 		}
 	}
-	_, err = tx.Exec("update books_fts set title=?, author=?, series=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, book.ID)
+	var tags []string
+	for i, f := range book.Files {
+		if f.ID != existingBook.Files[i].ID {
+			// Someone tried to delete from/reorder the files list, which isn't currently supported.
+			return errors.New("file list reorder not supported")
+		}
+		for _, t := range f.Tags {
+			tags = append(tags, t)
+		}
+		if stringSlicesEqual(existingBook.Files[i].Tags, f.Tags, false) {
+			continue
+		}
+		_, err = tx.Exec("delete from files_tags where file_id=?", f.ID)
+		if err != nil {
+			return errors.Wrap(err, "delete existing file tags")
+		}
+		for _, t := range f.Tags {
+			err := insertTag(tx, t, &f)
+			if err != nil {
+				return errors.Wrap(err, "insert tag")
+			}
+		}
+	}
+	_, err = tx.Exec("update books_fts set title=?, author=?, series=?, tags=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, strings.Join(tags, " "), book.ID)
 	if err != nil {
 		return errors.Wrap(err, "update fts")
 	}
@@ -738,7 +764,7 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	}
 
 	for bookID, authorNames := range authorMap {
-		if authorsEqual(authors, authorNames, true) {
+		if stringSlicesEqual(authors, authorNames, true) {
 			return bookID, true, nil
 		}
 	}
@@ -811,7 +837,7 @@ func (lib *Library) GetBookIDByFilename(fn string) (int64, error) {
 		return id, nil
 	}
 	rows.Close()
-	return 0, errors.New("book not found")
+	return 0, ErrBookNotFound
 }
 
 func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Template, move bool) error {
@@ -860,7 +886,7 @@ func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Templa
 	return nil
 }
 
-func authorsEqual(a, b []string, ignoreCase bool) bool {
+func stringSlicesEqual(a, b []string, ignoreCase bool) bool {
 	if len(a) != len(b) {
 		return false
 	}
