@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"log"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -248,10 +249,10 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		return errors.Wrap(err, "index book in search")
 	}
 
-	err = lib.updateFilenames(tx, book, tmpl, move)
+	err = lib.insertFile(bf.CurrentFilename, bf.Hash, move)
 	if err != nil {
 		tx.Rollback()
-		return errors.Wrap(err, "Moving or copying book")
+		return errors.Wrap(err, "insert book")
 	}
 
 	err = tx.Commit()
@@ -722,10 +723,6 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 	if err != nil {
 		return errors.Wrap(err, "update fts")
 	}
-	err = lib.updateFilenames(tx, book, tmpl, true)
-	if err != nil {
-		log.Printf("Error updating filenames: %s", err)
-	}
 	log.Printf("Updated book %d with authors: %s series: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Series, book.Title)
 	return nil
 }
@@ -814,9 +811,6 @@ func (lib *Library) mergeBooks(tx *sql.Tx, ids []int64, tmpl *template.Template)
 	if err := indexBookInSearch(tx, &books[0], true); err != nil {
 		return errors.Wrap(err, "index book in search")
 	}
-	if err := lib.updateFilenames(tx, books[0], tmpl, true); err != nil {
-		return errors.Wrap(err, "update filenames")
-	}
 	return nil
 }
 
@@ -840,48 +834,26 @@ func (lib *Library) GetBookIDByFilename(fn string) (int64, error) {
 	return 0, ErrBookNotFound
 }
 
-func (lib *Library) updateFilenames(tx *sql.Tx, book Book, tmpl *template.Template, move bool) error {
-	for _, bf := range book.Files {
-		if bf.ID == 0 {
-			return errors.New("ID cannot be 0")
+func (lib *Library) insertFile(file, hash string, delete bool) error {
+	newPath := filepath.Join(lib.booksRoot, hash[:2], hash[2:4], hash)
+	_, err := os.Stat(newPath)
+	if os.IsExist(err) {
+		if delete {
+			err := os.Remove(file)
+			if err != nil {
+				log.Printf("Error deleting %s: %v", file, err)
+			}
 		}
-		newFn, err := bf.Filename(tmpl, &book)
-		if err != nil {
-			return errors.Wrap(err, "get new filename")
-		}
-		newFn = TruncateFilename(newFn)
-		if bf.CurrentFilename == newFn {
-			continue
-		}
-		currentFilename := bf.CurrentFilename
-		if !filepath.IsAbs(currentFilename) {
-			currentFilename = filepath.Join(lib.booksRoot, currentFilename)
-		}
-		newPath, err := GetUniqueName(filepath.Join(lib.booksRoot, newFn), currentFilename)
-		if err != nil {
-			return errors.Wrap(err, "get unique name")
-		}
-		if currentFilename == newPath {
-			log.Printf("Not renaming %s", newFn)
-			continue
-		}
-		relPath, err := filepath.Rel(lib.booksRoot, newPath)
-		if err != nil {
-			return errors.Wrap(err, "get relative path")
-		}
-		var cf string
-		if filepath.IsAbs(bf.CurrentFilename) {
-			// Importing this book
-			cf = bf.CurrentFilename
-		} else {
-			cf = filepath.Join(lib.booksRoot, bf.CurrentFilename)
-		}
-		if err := moveOrCopyFile(cf, newPath, move); err != nil {
-			return errors.Wrap(err, "move or copy file")
-		}
-		if _, err := tx.Exec("update files set updated_on=datetime(), filename=? where id=?", relPath, bf.ID); err != nil {
-			return errors.Wrap(err, "updating file")
-		}
+		return nil
+	} else if !os.IsNotExist(err) && err != nil {
+		return errors.Wrap(err, "stat")
+	}
+	// Move or copy the file to .tmp first, to avoid crashes causing partial files.
+	if err := moveOrCopyFile(file, newPath+".tmp", delete); err != nil {
+		return errors.Wrap(err, "move or copy file")
+	}
+	if err = os.Rename(newPath+".tmp", newPath); err != nil {
+		return errors.Wrap(err, "rename temporary file")
 	}
 	return nil
 }
