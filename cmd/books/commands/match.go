@@ -7,11 +7,8 @@ package commands
 import (
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
-	"strings"
-	"text/template"
 
 	"fmt"
 
@@ -89,13 +86,6 @@ func matchFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "Using metadata parsers: %v\n", metadataParsers)
-	outputTmplSrc := viper.GetString("output_template")
-	var err error
-	outputTmpl, err = template.New("filename").Funcs(template.FuncMap{"ToUpper": strings.ToUpper, "join": strings.Join, "escape": books.Escape}).Parse(outputTmplSrc)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
-		os.Exit(1)
-	}
 
 	library, err := books.OpenLibrary(libraryFile, booksRoot)
 	if err != nil {
@@ -137,13 +127,6 @@ func searchDupes(root string, recursive bool, library *books.Library) error {
 
 // searchDupe searches for a single duplicate book.
 func searchDupe(filename string, library *books.Library) error {
-	fi, err := os.Stat(filename)
-	if err != nil {
-		return errors.Wrap(err, "Get file info for book")
-	}
-
-	tags := splitTags(filename)
-	ext := path.Ext(filename)
 	var book books.Book
 	var matched bool
 	for _, parserName := range metadataParsers {
@@ -155,27 +138,6 @@ func searchDupe(filename string, library *books.Library) error {
 	if !matched {
 		return errors.Errorf("No metadata parser matched %s", filename)
 	}
-
-	bf := books.BookFile{Tags: tags, OriginalFilename: filename}
-	bf.FileSize = fi.Size()
-	bf.FileMtime = fi.ModTime()
-	bf.Extension = strings.TrimPrefix(ext, ".")
-
-	s, err := bf.Filename(outputTmpl, &book)
-	if err != nil {
-		return errors.Wrap(err, "Calculate output filename for book")
-	}
-	s = books.TruncateFilename(s)
-	newFilename, err := books.GetUniqueName(filepath.Join(booksRoot, s), "")
-	if err != nil {
-		return errors.Wrap(err, "get unique filename")
-	}
-	bf.CurrentFilename, err = filepath.Rel(booksRoot, newFilename)
-	if err != nil {
-		return errors.Wrap(err, "get new book filename")
-	}
-	bf.CurrentFilename = strings.Replace(bf.CurrentFilename, string(filepath.Separator), "/", -1)
-	book.Files = append(book.Files, bf)
 
 	id, found, err := library.GetBookIDByTitleAndAuthors(book.Title, book.Authors)
 	if err != nil {
