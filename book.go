@@ -88,6 +88,10 @@ func (bf *BookFile) CalculateHash() error {
 	return nil
 }
 
+func (bf *BookFile) HashPath() string {
+	return path.Join(bf.Hash[:2], bf.Hash[2:4], bf.Hash)
+}
+
 // ParseFilename creates a new Book given a filename and regular expression.
 // The named groups author, title, series, and extension in the regular expression will map to their respective fields in the resulting book.
 func ParseFilename(filename string, re *regexp.Regexp) (Book, bool) {
