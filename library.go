@@ -49,10 +49,10 @@ updated_on timestamp not null default (datetime()),
 book_id integer references books(id) on delete cascade not null,
 extension text not null,
 original_filename text not null,
-filename text not null unique,
+filename text not null,
 file_size integer not null,
 file_mtime timestamp not null,
-hash text not null unique,
+hash text not null,
 template_override text,
 source text
 );
@@ -157,25 +157,6 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		return err
 	}
 
-	rows, err := tx.Query("select id from files where hash=?", book.Files[0].Hash)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	if rows.Next() {
-		// This book's hash is already in the library.
-		var id int64
-		rows.Scan(&id)
-		tx.Rollback()
-		return errors.Errorf("A duplicate book already exists with id %d", id)
-	}
-
-	rows.Close()
-	if rows.Err() != nil {
-		tx.Rollback()
-		return errors.Wrapf(err, "Searching for duplicate book by hash %s", book.Files[0].Hash)
-	}
-
 	existingBookID, found, err := getBookIDByTitleAndAuthors(tx, book.Title, book.Authors)
 	if err != nil {
 		tx.Rollback()
@@ -205,6 +186,18 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 			return errors.Wrap(err, "get existing book")
 		}
 		existingBook := existingBooksList[0]
+		for _, f := range existingBook.Files {
+			if f.Hash != book.Files[0].Hash {
+				continue
+			}
+			tx.Commit()
+			log.Printf("Not importing duplicate file into book with authors: %s title: %s", book.Authors, book.Title)
+			if move {
+				err := os.Remove(book.Files[0].OriginalFilename)
+				log.Printf("Error deleting %s: %v", f.OriginalFilename, err)
+			}
+			return nil
+		}
 		// Update the existing book series only if it's empty
 		existingBook.Series = book.Series
 		err = lib.updateBook(tx, existingBook, tmpl, false)
