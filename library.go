@@ -221,6 +221,10 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 	}
 
 	bf := &book.Files[len(book.Files)-1]
+	bf.CurrentFilename, err = bf.Filename(tmpl, &book)
+	if err != nil {
+		return errors.Wrap(err, "get current filename")
+	}
 	res, err := tx.Exec(`insert into files (book_id, extension, original_filename, filename, file_size, file_mtime, hash, source)
 	values (?, ?, ?, ?, ?, ?, ?, ?)`,
 		book.ID, bf.Extension, bf.OriginalFilename, bf.CurrentFilename, bf.FileSize, bf.FileMtime, bf.Hash, bf.Source)
@@ -249,7 +253,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		return errors.Wrap(err, "index book in search")
 	}
 
-	err = lib.insertFile(bf.CurrentFilename, bf.Hash, move)
+	err = lib.insertFile(bf.OriginalFilename, bf.Hash, move)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "insert book")
@@ -722,6 +726,18 @@ func (lib *Library) updateBook(tx *sql.Tx, book Book, tmpl *template.Template, o
 	_, err = tx.Exec("update books_fts set title=?, author=?, series=?, tags=? where docid=?", book.Title, strings.Join(book.Authors, " & "), book.Series, strings.Join(tags, " "), book.ID)
 	if err != nil {
 		return errors.Wrap(err, "update fts")
+	}
+	for _, bf := range book.Files {
+		newFn, err := bf.Filename(tmpl, &book)
+		if err != nil {
+			return errors.Wrap(err, "get new filename")
+		}
+		if bf.CurrentFilename == newFn {
+			continue
+		}
+		if _, err := tx.Exec("update files set updated_on=datetime(), filename=? where id=?", newFn, bf.ID); err != nil {
+			return errors.Wrap(err, "update file")
+		}
 	}
 	log.Printf("Updated book %d with authors: %s series: %s title: %s", book.ID, strings.Join(book.Authors, " & "), book.Series, book.Title)
 	return nil
