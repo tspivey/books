@@ -57,6 +57,7 @@ template_override text,
 source text
 );
 create index idx_files_book_id on files(book_id);
+create index idx_files_hash on files(hash);
 
 create table authors (
 id integer primary key,
@@ -795,7 +796,11 @@ func (lib *Library) MergeBooks(ids []int64, tmpl *template.Template) error {
 }
 
 func (lib *Library) mergeBooks(tx *sql.Tx, ids []int64, tmpl *template.Template) error {
-	_, err := tx.Exec("update files set updated_on=datetime(), book_id=? where book_id in ("+joinInt64s(ids[1:], ",")+")", ids[0])
+	_, err := tx.Exec("delete from files where book_id in ("+joinInt64s(ids[1:], ",")+") and hash in (select hash from files where book_id=?)", ids[0])
+	if err != nil {
+		return errors.Wrap(err, "delete duplicate files")
+	}
+	_, err = tx.Exec("update files set updated_on=datetime(), book_id=? where book_id in ("+joinInt64s(ids[1:], ",")+")", ids[0])
 	if err != nil {
 		return errors.Wrap(err, "merge books")
 	}
