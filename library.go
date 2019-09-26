@@ -822,6 +822,19 @@ func (lib *Library) mergeBooks(tx *sql.Tx, ids []int64, tmpl *template.Template)
 	if len(books) == 0 {
 		return errors.New("Can't find original book to reindex")
 	}
+	for _, f := range books[0].Files {
+		newFn, err := f.Filename(tmpl, &books[0])
+		if err != nil {
+			return errors.Wrap(err, "get filename")
+		}
+		if newFn == f.CurrentFilename {
+			continue
+		}
+		_, err = tx.Exec("update files set updated_on=datetime(), filename=? where id=?", newFn, f.ID)
+		if err != nil {
+			return errors.Wrap(err, "update filename")
+		}
+	}
 	if err := indexBookInSearch(tx, &books[0], true); err != nil {
 		return errors.Wrap(err, "index book in search")
 	}
