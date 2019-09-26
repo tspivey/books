@@ -779,6 +779,37 @@ func getBookIDByTitleAndAuthors(tx *sql.Tx, title string, authors []string) (int
 	return 0, false, nil
 }
 
+// GetBooksByHash retrieves books from the library by the hash of one of their files.
+func (lib *Library) GetBooksByHash(hash string) ([]Book, error) {
+	bks := []Book{}
+	tx, err := lib.Begin()
+	if err != nil {
+		return bks, errors.Wrap(err, "begin transaction")
+	}
+	rows, err := tx.Query("select distinct book_id from files where hash=?", hash)
+	if err != nil {
+		tx.Commit()
+		return bks, errors.Wrap(err, "query book IDs")
+	}
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		tx.Commit()
+		return bks, errors.Wrap(err, "get rows")
+	}
+	bks, err = getBooksByID(tx, ids)
+	if err != nil {
+		tx.Commit()
+		return bks, errors.Wrap(err, "get books by ID")
+	}
+	tx.Commit()
+	return bks, nil
+}
+
 // MergeBooks merges all of the files from ids into the first one.
 func (lib *Library) MergeBooks(ids []int64, tmpl *template.Template) error {
 	tx, err := lib.Begin()

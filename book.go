@@ -88,6 +88,7 @@ func (bf *BookFile) CalculateHash() error {
 	return nil
 }
 
+// HashPath gets the path of a file's hash, relative to books root.
 func (bf *BookFile) HashPath() string {
 	return path.Join(bf.Hash[:2], bf.Hash[2:4], bf.Hash)
 }
