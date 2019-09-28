@@ -247,7 +247,7 @@ func (lib *Library) ImportBook(book Book, tmpl *template.Template, move bool) er
 		return errors.Wrap(err, "index book in search")
 	}
 
-	err = lib.insertFile(bf.OriginalFilename, bf.Hash, move)
+	err = lib.insertFile(*bf, move)
 	if err != nil {
 		tx.Rollback()
 		return errors.Wrap(err, "insert book")
@@ -892,22 +892,22 @@ func (lib *Library) GetBookIDByFilename(fn string) (int64, error) {
 	return 0, ErrBookNotFound
 }
 
-func (lib *Library) insertFile(file, hash string, delete bool) error {
-	newPath := filepath.Join(lib.booksRoot, hash[:2], hash[2:4], hash)
+func (lib *Library) insertFile(file BookFile, deleteOriginal bool) error {
+	newPath := filepath.Join(lib.booksRoot, file.HashPath())
 	_, err := os.Stat(newPath)
-	if os.IsExist(err) {
-		if delete {
-			err := os.Remove(file)
+	if err == nil {
+		if deleteOriginal {
+			err := os.Remove(file.OriginalFilename)
 			if err != nil {
-				log.Printf("Error deleting %s: %v", file, err)
+				log.Printf("Error deleting %s: %v", file.OriginalFilename, err)
 			}
 		}
 		return nil
-	} else if !os.IsNotExist(err) && err != nil {
+	} else if !os.IsNotExist(err) {
 		return errors.Wrap(err, "stat")
 	}
 	// Move or copy the file to .tmp first, to avoid crashes causing partial files.
-	if err := moveOrCopyFile(file, newPath+".tmp", delete); err != nil {
+	if err := moveOrCopyFile(file.OriginalFilename, newPath+".tmp", deleteOriginal); err != nil {
 		return errors.Wrap(err, "move or copy file")
 	}
 	if err = os.Rename(newPath+".tmp", newPath); err != nil {
