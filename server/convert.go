@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -77,13 +78,21 @@ func (c *calibreBookConverter) work() {
 		c.converting[bookFile.ID] = errBookNotReady
 		c.convertingMtx.Unlock()
 
-		filename := path.Join(c.booksRoot, bookFile.CurrentFilename)
+		filename := path.Join(c.booksRoot, bookFile.HashPath())
+		tmpFile := path.Join(c.cacheDir, bookFile.Hash+"."+bookFile.Extension)
 		newFile := path.Join(c.cacheDir, bookFile.Hash+".epub")
-		cmd := exec.Command("ebook-convert", filename, newFile)
-		err := cmd.Run()
+		err := os.Symlink(filename, tmpFile)
+		if err == nil {
+			cmd := exec.Command("ebook-convert", tmpFile, newFile)
+			err = cmd.Run()
+			if err := os.Remove(tmpFile); err != nil {
+				log.Printf("Unable to remove %s: %v", tmpFile, err)
+			}
+		}
 
 		c.convertingMtx.Lock()
 		if err != nil {
+			log.Printf("%v", err)
 			c.converting[bookFile.ID] = err
 		} else {
 			delete(c.converting, bookFile.ID)

@@ -5,11 +5,11 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -40,7 +40,7 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// editCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	editCmd.Flags().BoolP("file", "f", false, "Specify a book  by one of its filenames")
+	editCmd.Flags().BoolP("hash", "H", false, "Specify a book  by one of its hashes")
 }
 
 func editFunc(cmd *cobra.Command, args []string) {
@@ -48,7 +48,7 @@ func editFunc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: books edit <book id>\n")
 		os.Exit(1)
 	}
-	useFile, err := cmd.Flags().GetBool("file")
+	useHash, err := cmd.Flags().GetBool("hash")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,51 +59,74 @@ func editFunc(cmd *cobra.Command, args []string) {
 	}
 	defer library.Close()
 
-	var bookID int64
-	if useFile {
-		rootPath := booksRoot + string(os.PathSeparator)
-		absPath, err := filepath.Abs(args[0])
+	var bookToEdit books.Book
+	if useHash {
+		hash := args[0]
+		bks, err := library.GetBooksByHash(hash)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting absolute path: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Error getting books by hash: %s\n", err)
 			os.Exit(1)
 		}
-		var fn string
-		if strings.HasPrefix(absPath, rootPath) {
-			fn = strings.TrimPrefix(absPath, rootPath)
+		if len(bks) == 0 {
+			fmt.Fprintf(os.Stderr, "Hash not found.\n")
+			os.Exit(1)
+		} else if len(bks) == 1 {
+			bookToEdit = bks[0]
 		} else {
-			fmt.Fprintf(os.Stderr, "Book not found.\n")
-			os.Exit(1)
-		}
-		bookID, err = library.GetBookIDByFilename(fn)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting book: %s\n", err)
-			os.Exit(1)
+			for i, book := range bks {
+				bookName := books.JoinNaturally("and", book.Authors) + " - " + book.Title
+				if book.Series != "" {
+					bookName += " [" + book.Series + "]"
+				}
+				bookName += " (" + strconv.FormatInt(book.ID, 10) + ")"
+				fmt.Printf("%d. %s\n", i+1, bookName)
+			}
+			reader := bufio.NewReader(os.Stdin)
+			var bookIdx int
+			for {
+				fmt.Print("Select book: ")
+				text, err := reader.ReadString('\n')
+				if err == io.EOF {
+					os.Exit(0)
+				} else if err != nil {
+					fmt.Printf("%v\n", err)
+					os.Exit(1)
+				}
+				bookIdx, err = strconv.Atoi(strings.TrimSpace(text))
+				if err != nil || bookIdx < 1 || bookIdx > len(bks) {
+					fmt.Printf("Please enter a number between 1 and %d.\n", len(bks))
+					continue
+				}
+				break
+			}
+			bookToEdit = bks[bookIdx-1]
 		}
 	} else {
-		bookID, err = strconv.ParseInt(args[0], 10, 64)
+		// Edit book by ID
+		bookID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid book ID.\n")
 			os.Exit(1)
 		}
+		foundBooks, err := library.GetBooksByID([]int64{int64(bookID)})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting books by ID: %s", err)
+			os.Exit(1)
+		}
+		if len(foundBooks) == 0 {
+			fmt.Fprintf(os.Stderr, "Book not found.\n")
+			os.Exit(1)
+		}
+		bookToEdit = foundBooks[0]
 	}
 
-	foundBooks, err := library.GetBooksByID([]int64{int64(bookID)})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting books by ID: %s", err)
-		os.Exit(1)
-	}
-	if len(foundBooks) == 0 {
-		fmt.Fprintf(os.Stderr, "Book not found.\n")
-		os.Exit(1)
-	}
-	book := foundBooks[0]
 	outputTmplSrc := viper.GetString("output_template")
 	outputTmpl, err := template.New("filename").Funcs(funcMap).Parse(outputTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
 		os.Exit(1)
 	}
-	parser := edit.NewParser(&book, library, outputTmpl)
+	parser := edit.NewParser(&bookToEdit, library, outputTmpl)
 	parser.RunCommand("show", "")
 	line := liner.NewLiner()
 	defer line.Close()

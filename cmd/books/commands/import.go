@@ -183,11 +183,6 @@ func importBook(filename string, library *books.Library) error {
 		return errors.Wrap(err, "Calculate book hash")
 	}
 
-	// CurrentFilename needs to be set so updateFilenames can copy/move the original file
-	bf.CurrentFilename, err = filepath.Abs(bf.OriginalFilename)
-	if err != nil {
-		return errors.Wrap(err, "get absolute path")
-	}
 	book.Files = append(book.Files, bf)
 
 	if err := library.ImportBook(book, outputTmpl, viper.GetBool("move")); err != nil {
