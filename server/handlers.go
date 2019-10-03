@@ -35,7 +35,7 @@ func (srv *Server) downloadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	file := files[0]
 
-	fn := path.Join(srv.booksRoot, file.CurrentFilename)
+	fn := path.Join(srv.booksRoot, file.HashPath())
 	base := path.Base(fn)
 	if _, err := os.Stat(fn); os.IsNotExist(err) {
 		log.Printf("File %d is in the library but the file is missing: %s", file.ID, fn)
