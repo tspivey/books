@@ -801,6 +801,7 @@ func (lib *Library) GetBooksByHash(hash string) ([]Book, error) {
 		tx.Commit()
 		return bks, errors.Wrap(err, "get rows")
 	}
+	rows.Close()
 	bks, err = getBooksByID(tx, ids)
 	if err != nil {
 		tx.Commit()
