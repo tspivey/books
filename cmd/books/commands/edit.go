@@ -59,7 +59,7 @@ func editFunc(cmd *cobra.Command, args []string) {
 	}
 	defer library.Close()
 
-	var bookID int64
+	var bookToEdit books.Book
 	if useHash {
 		hash := args[0]
 		bks, err := library.GetBooksByHash(hash)
@@ -71,7 +71,7 @@ func editFunc(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Hash not found.\n")
 			os.Exit(1)
 		} else if len(bks) == 1 {
-			bookID = bks[0].ID
+			bookToEdit = bks[0]
 		} else {
 			for i, book := range bks {
 				bookName := books.JoinNaturally("and", book.Authors) + " - " + book.Title
@@ -99,33 +99,34 @@ func editFunc(cmd *cobra.Command, args []string) {
 				}
 				break
 			}
-			bookID = bks[bookIdx-1].ID
+			bookToEdit = bks[bookIdx-1]
 		}
 	} else {
-		bookID, err = strconv.ParseInt(args[0], 10, 64)
+		// Edit book by ID
+		bookID, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid book ID.\n")
 			os.Exit(1)
 		}
+		foundBooks, err := library.GetBooksByID([]int64{int64(bookID)})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error getting books by ID: %s", err)
+			os.Exit(1)
+		}
+		if len(foundBooks) == 0 {
+			fmt.Fprintf(os.Stderr, "Book not found.\n")
+			os.Exit(1)
+		}
+		bookToEdit = foundBooks[0]
 	}
 
-	foundBooks, err := library.GetBooksByID([]int64{int64(bookID)})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting books by ID: %s", err)
-		os.Exit(1)
-	}
-	if len(foundBooks) == 0 {
-		fmt.Fprintf(os.Stderr, "Book not found.\n")
-		os.Exit(1)
-	}
-	book := foundBooks[0]
 	outputTmplSrc := viper.GetString("output_template")
 	outputTmpl, err := template.New("filename").Funcs(funcMap).Parse(outputTmplSrc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot parse output template: %s\n\n%s\n", err, outputTmplSrc)
 		os.Exit(1)
 	}
-	parser := edit.NewParser(&book, library, outputTmpl)
+	parser := edit.NewParser(&bookToEdit, library, outputTmpl)
 	parser.RunCommand("show", "")
 	line := liner.NewLiner()
 	defer line.Close()
