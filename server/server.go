@@ -51,6 +51,7 @@ func New(cfg *Config) *Server {
 		"base":          path.Base,
 		"pathEscape":    url.PathEscape,
 		"changeExt":     changeExt,
+		"ByteCountSI":   books.ByteCountSI,
 	}
 	srv := &Server{
 		lib:            cfg.Lib,
