@@ -2,7 +2,11 @@
 {{$title := printf "Results for %s" .Query }}
 {{template "header" $title}}
 {{ template "searchform" . }}
+{{ if .Books -}}
 <h2>Search results for {{ .Query }}</h2>
+{{ else -}}
+<h2>No results for {{ .Query }}</h2>
+{{ end }}
 <div id="results-display" style="display:inline-block; float:left;width: 80%">
 {{ if .Books -}}
 {{ range $v := .Books -}}
