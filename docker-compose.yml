@@ -1,0 +1,13 @@
+version: '3'
+services:
+  books:
+    image: books
+    container_name: books
+    ports:
+      - "8000:80"
+    volumes:
+      - books-config:/config  # Change this to a bind mount if you already have a config (or create the volume manually ahead of time)
+      - ~/books:/books_root  # Maintain the books root in the user's home directory as usual
+    restart: unless-stopped
+volumes:
+  books-config:
